@@ -31,8 +31,12 @@ import (
 // 	}
 // 	return FetchKeysBy(url, ctx)
 // }
-func FetchSet(url interface{}, handles ...HandleContext) (s *Set, err error) {
-	return FetchSetBy(reduceContext(context.Background(), handles...), url)
+func FetchSet(url interface{}, options ...OptionalFetchSet) (s *Set, err error) {
+	ctx := context.Background()
+	for _, option := range options {
+		ctx = option.WithFetchSet(ctx)
+	}
+	return FetchSetBy(ctx, url)
 }
 
 // func FetchKeyBy(url interface{}, ctx context.Context) (*Key, error) {
@@ -68,10 +72,9 @@ func FetchSet(url interface{}, handles ...HandleContext) (s *Set, err error) {
 // 	return nil, nil
 // }fqwqe
 func FetchSetBy(ctx context.Context, urlloc interface{}) (*Set, error) {
-	hclt, ok := utilInterfaceOr(ctx.Value(ctxHTTPClient), http.DefaultClient).(*http.Client)
-	if !ok {
-		return nil, errorCause(ErrInvalidContext, "'%s' must be %T, but got %T", ctxHTTPClient, http.DefaultClient, ctx.Value(ctxHTTPClient))
-	}
+	var option *OptionFetchSet
+	getContextValue(ctx, &option, false)
+	//
 	rurlloc, err := utilURL(urlloc)
 	if err != nil {
 		return nil, &ErrorDetail{
@@ -79,7 +82,7 @@ func FetchSetBy(ctx context.Context, urlloc interface{}) (*Set, error) {
 			Detail: err,
 		}
 	}
-	res, err := utilResponse(rurlloc, ctx, hclt)
+	res, err := utilResponse(rurlloc, ctx, option.Client)
 	if err != nil {
 		return nil, &ErrorDetail{
 			Cause:  ErrHTTPRequest,

@@ -109,7 +109,8 @@ func utilConsumeMap(m map[string]interface{}, k string) (map[string]interface{},
 
 func utilConsumeB64url(m map[string]interface{}, k string) ([]byte, error) {
 	if s, err := utilConsumeStr(m, k); err == nil {
-		bts, err := base64.URLEncoding.DecodeString(s)
+
+		bts, err := base64.RawURLEncoding.DecodeString(s)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +122,7 @@ func utilConsumeB64url(m map[string]interface{}, k string) ([]byte, error) {
 
 func utilConsumeB64std(m map[string]interface{}, k string) ([]byte, error) {
 	if s, err := utilConsumeStr(m, k); err == nil {
-		bts, err := base64.StdEncoding.DecodeString(s)
+		bts, err := base64.RawStdEncoding.DecodeString(s)
 		if err != nil {
 			return nil, err
 		}

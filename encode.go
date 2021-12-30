@@ -10,8 +10,12 @@ import (
 	"math/big"
 )
 
-func EncodeKey(src *Key, dst io.Writer, handles ...HandleContext) error {
-	return EncodeKeyBy(reduceContext(context.Background()), src, dst)
+func EncodeKey(src *Key, dst io.Writer, options ...OptionalEncodeKey) error {
+	ctx := context.Background()
+	for _, option := range options {
+		ctx = option.WithEncodeKey(ctx)
+	}
+	return EncodeKeyBy(ctx, src, dst)
 }
 
 func EncodeKeyBy(ctx context.Context, src *Key, dst io.Writer) error {
@@ -109,8 +113,12 @@ func encodePubEC(data map[string]interface{}, pubk *ecdsa.PublicKey) {
 	data["y"] = base64.URLEncoding.EncodeToString(pubk.Y.Bytes())
 }
 
-func EncodeSet(src *Set, dst io.Writer, handles ...HandleContext) error {
-	return EncodeSetBy(reduceContext(context.Background(), handles...), src, dst)
+func EncodeSet(src *Set, dst io.Writer, options ...OptionalEncodeSet) error {
+	ctx := context.Background()
+	for _, option := range options {
+		ctx = option.WithEncodeSet(ctx)
+	}
+	return EncodeSetBy(ctx, src, dst)
 }
 func EncodeSetBy(ctx context.Context, src *Set, dst io.Writer) error {
 	select {

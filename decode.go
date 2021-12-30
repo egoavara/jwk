@@ -28,14 +28,17 @@ type (
 	}
 )
 
-func DecodeKey(reader io.Reader, handles ...HandleContext) (*Key, error) {
-	return DecodeKeyBy(reduceContext(context.Background(), handles...), reader)
+func DecodeKey(reader io.Reader, options ...OptionalDecodeKey) (*Key, error) {
+	ctx := context.Background()
+	for _, option := range options {
+		ctx = option.WithDecodeKey(ctx)
+	}
+	return DecodeKeyBy(ctx, reader)
 }
 
 func DecodeKeyBy(ctx context.Context, reader io.Reader) (*Key, error) {
-	isStrict := utilInterfaceOr(ctx.Value(ctxJSONStrict), false).(bool)
-	recalculate := utilInterfaceOr(ctx.Value(ctxRecompute), false).(bool)
-	noValidate := utilInterfaceOr(ctx.Value(ctxNoValidate), false).(bool)
+	var option *OptionDecodeKey
+	getContextValue(ctx, &option, false)
 	doneResult := make(chan interface{}, 1)
 	// Step 1 : JSON Decode
 	go func() {
@@ -106,8 +109,8 @@ func DecodeKeyBy(ctx context.Context, reader io.Reader) (*Key, error) {
 						return
 					}
 				}
-				if kid, ok := ctx.Value(ctxKeyID).(string); ok {
-					key.KeyID = kid
+				if len(option.AssignID) > 0 {
+					key.KeyID = option.AssignID
 				}
 				// x5u
 				if x5u, err := utilConsumeURL(v, "x5u"); err == nil {
@@ -167,7 +170,7 @@ func DecodeKeyBy(ctx context.Context, reader io.Reader) (*Key, error) {
 						doneResult <- err
 						return
 					}
-					prik, err := decodeRSAPriKey(v, pubk, recalculate, noValidate)
+					prik, err := decodeRSAPriKey(v, pubk, option.Recalculate, option.NoValidate)
 					if err != nil {
 						doneResult <- err
 						return
@@ -210,7 +213,7 @@ func DecodeKeyBy(ctx context.Context, reader io.Reader) (*Key, error) {
 			}()
 		// Step 3 : Check Strict Mode
 		case *innerJWKKeyLeft:
-			if isStrict && len(v.Map) > 0 {
+			if option.Strict && len(v.Map) > 0 {
 				builder := new(strings.Builder)
 				builder.WriteString("[")
 				for k := range v.Map {
@@ -239,11 +242,11 @@ func decodeRSAPubKey(data map[string]interface{}) (*rsa.PublicKey, error) {
 		n = new(big.Int).SetBytes(bn)
 	} else {
 		if errors.Is(err, errKeyNotExist) {
-			return nil, errorCause(ErrKeyPubRSAFailed, "'n' not exist")
+			return nil, errorCauseField(ErrKeyPubRSAFailed, "n", "not exist")
 		} else if errors.Is(err, errInvalidType) {
-			return nil, errorCause(ErrKeyPubRSAFailed, "'n' must be string")
+			return nil, errorCauseField(ErrKeyPubRSAFailed, "n", "must be string")
 		} else {
-			return nil, &ErrorDetail{Cause: ErrKeyPubRSAFailed, Detail: err}
+			return nil, errorCauseFieldFrom(ErrKeyPubRSAFailed, "n", err)
 		}
 	}
 	if be, err := utilConsumeB64url(data, "e"); err == nil {
@@ -443,18 +446,23 @@ func decodeECPriKey(data map[string]interface{}, pubk *ecdsa.PublicKey) (*ecdsa.
 	}
 	return prik, nil
 }
-func DecodeSet(reader io.Reader, handles ...HandleContext) (*Set, error) {
-	return DecodeSetBy(reduceContext(context.Background(), handles...), reader)
+func DecodeSet(reader io.Reader, options ...OptionalDecodeSet) (*Set, error) {
+	ctx := context.Background()
+	for _, option := range options {
+		ctx = option.WithDecodeSet(ctx)
+	}
+	return DecodeSetBy(ctx, reader)
 }
 
 func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
+	var option *OptionDecodeSet
+	getContextValue(ctx, &option, false)
 	doneResult := make(chan interface{}, 1)
-	isStrict := utilInterfaceOr(ctx.Value(ctxJSONStrict), false).(bool)
 	// Step 1 : parse raw text to json unmarshaled struct
 	go func() {
 		var data innerJWKSet
 		dec := json.NewDecoder(reader)
-		if isStrict {
+		if option.Strict {
 			dec.DisallowUnknownFields()
 		}
 		err := dec.Decode(&data)
@@ -482,22 +490,15 @@ func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
 		case *innerJWKSet:
 			works = len(v.Keys)
 			result.Keys = make([]*Key, len(v.Keys))
-			innerKeyCtx := context.WithValue(ctx, ctxKeyID, nil)
 			for i, key := range v.Keys {
 				go func(i int, key string) {
-					res, err := DecodeKeyBy(innerKeyCtx, strings.NewReader(key))
+					res, err := DecodeKeyBy(ctx, strings.NewReader(key))
 					select {
 					case <-ctx.Done():
 						close(doneResult)
 					default:
 						if err != nil {
-							doneResult <- &ErrorDetail{
-								Cause: ErrSetInnerKey,
-								Detail: &ErrorIndex{
-									Index:  i,
-									Detail: err,
-								},
-							}
+							doneResult <- errorCauseAtFrom(ErrSetInnerKey, i, err)
 						} else {
 							doneResult <- &innerJWKSetEachKey{
 								Index: i,

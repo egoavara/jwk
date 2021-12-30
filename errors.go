@@ -30,7 +30,7 @@ var (
 	ErrHTTPRequest     = errors.New("http request failed")
 	ErrContextDone     = errors.New("context done")
 	ErrJSON            = errors.New("json error")
-	ErrSetInnerKey     = errors.New("key from set failed")
+	ErrSetInnerKey     = errors.New("set inner key failed")
 	ErrKeyNoRequired   = errors.New("no `kty`")
 	ErrKeyParse        = errors.New("error while parsing")
 	ErrKeyPubECFailed  = errors.New("ec public key failed")
@@ -62,6 +62,13 @@ func errorCauseField(cause error, field string, defailFormat string, params ...i
 	}
 }
 
+func errorCauseAtFrom(cause error, at int, err error) error {
+	return &ErrorIndex{
+		Cause:  cause,
+		Index:  at,
+		Detail: err,
+	}
+}
 func errorCauseAt(cause error, at int, defailFormat string, params ...interface{}) error {
 	return &ErrorIndex{
 		Cause:  cause,
@@ -70,7 +77,7 @@ func errorCauseAt(cause error, at int, defailFormat string, params ...interface{
 	}
 }
 func (e *ErrorDetail) Error() string {
-	return fmt.Sprintf("JWK Fail : %e : %e", e.Cause, e.Detail)
+	return fmt.Sprintf("JWK Fail : %v : %v", e.Cause, e.Detail)
 }
 
 func (e *ErrorDetail) Unwrap() error {
@@ -78,7 +85,7 @@ func (e *ErrorDetail) Unwrap() error {
 }
 
 func (e *ErrorField) Error() string {
-	return fmt.Sprintf("JWK Fail : %e : field = '%s' : %e", e.Cause, e.Field, e.Detail)
+	return fmt.Sprintf("JWK Fail : %v : field = '%s' : %v", e.Cause, e.Field, e.Detail)
 }
 
 func (e *ErrorField) Unwrap() error {
@@ -86,7 +93,7 @@ func (e *ErrorField) Unwrap() error {
 }
 
 func (e *ErrorIndex) Error() string {
-	return fmt.Sprintf("JWK Fail : %e : [%d] : %e", e.Cause, e.Index, e.Detail)
+	return fmt.Sprintf("JWK Fail : %v : [%d] : %v", e.Cause, e.Index, e.Detail)
 }
 
 func (e *ErrorIndex) Unwrap() error {
