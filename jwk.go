@@ -3,91 +3,141 @@ package jwk
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"net/url"
 )
 
 // Set is JWK Set struct
 // https://datatracker.ietf.org/doc/html/rfc7517#section-5
 type Set struct {
-	Keys []*Key // https://datatracker.ietf.org/doc/html/rfc7517#section-5.1
+	json.Marshaler
+	json.Unmarshaler
+	Keys  []Key // https://datatracker.ietf.org/doc/html/rfc7517#section-5.1
+	Extra map[string]interface{}
 }
 
-// Key is JWK Key struct
+// BaseKey is JWK BaseKey struct
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
-type Key struct {
-	KeyType                KeyType             // https://datatracker.ietf.org/doc/html/rfc7517#section-4.1
-	KeyUse                 KeyUse              // https://datatracker.ietf.org/doc/html/rfc7517#section-4.2
-	KeyOperations          KeyOps              // https://datatracker.ietf.org/doc/html/rfc7517#section-4.3
-	Algorithm              Algorithm           // https://datatracker.ietf.org/doc/html/rfc7517#section-4.4
-	KeyID                  string              // https://datatracker.ietf.org/doc/html/rfc7517#section-4.5
-	X509URL                *url.URL            // https://datatracker.ietf.org/doc/html/rfc7517#section-4.6
-	X509CertChain          []*x509.Certificate // https://datatracker.ietf.org/doc/html/rfc7517#section-4.7
-	X509CertThumbprint     []byte              // https://datatracker.ietf.org/doc/html/rfc7517#section-4.8
-	X509CertThumbprintS256 []byte              // https://datatracker.ietf.org/doc/html/rfc7517#section-4.9
-	// Go language stdlib crypto
-	// It can be one of `*rsa.PrivateKey | *rsa.PublicKey | *ecdsa.PrivateKey | *ecdsa.PublicKey`
-	Raw interface{}
+type Key interface {
+	json.Marshaler
+	json.Unmarshaler
+	Kty() KeyType
+	Use() KeyUse
+	KeyOps() KeyOps
+	Alg() Algorithm
+	Kid() string
+	X5u() *url.URL
+	X5c() []*x509.Certificate
+	X5t() []byte
+	X5tS256() []byte
+	Extra() map[string]interface{}
+	//
+	intoUnknown() *UnknownKey
 }
 
-// Return First Key from Set
-// If there is no key, it return nil (runtime safe)
-func (set *Set) First() *Key {
-	if len(set.Keys) > 0 {
-		return set.Keys[0]
+type (
+	BaseKey struct {
+		// KeyType not required : implementation reason. : https://datatracker.ietf.org/doc/html/rfc7517#section-4.2
+		KeyUse                 KeyUse                 // https://datatracker.ietf.org/doc/html/rfc7517#section-4.2
+		KeyOperations          KeyOps                 // https://datatracker.ietf.org/doc/html/rfc7517#section-4.3
+		Algorithm              Algorithm              // https://datatracker.ietf.org/doc/html/rfc7517#section-4.4
+		KeyID                  string                 // https://datatracker.ietf.org/doc/html/rfc7517#section-4.5
+		X509URL                *url.URL               // https://datatracker.ietf.org/doc/html/rfc7517#section-4.6
+		X509CertChain          []*x509.Certificate    // https://datatracker.ietf.org/doc/html/rfc7517#section-4.7
+		X509CertThumbprint     []byte                 // https://datatracker.ietf.org/doc/html/rfc7517#section-4.8
+		X509CertThumbprintS256 []byte                 // https://datatracker.ietf.org/doc/html/rfc7517#section-4.9
+		extra                  map[string]interface{} // extra fields for Key
 	}
-	return nil
+	UnknownKey struct {
+		BaseKey
+		KeyType KeyType
+	}
+
+	// https://www.rfc-editor.org/rfc/rfc7518#section-3
+	RSAPrivateKey struct {
+		BaseKey
+		Key *rsa.PrivateKey
+	}
+	// https://www.rfc-editor.org/rfc/rfc7518#section-3
+	RSAPublicKey struct {
+		BaseKey
+		Key *rsa.PublicKey
+	}
+	// https://www.rfc-editor.org/rfc/rfc7518#section-3
+	ECPrivateKey struct {
+		BaseKey
+		Key *ecdsa.PrivateKey
+	}
+	// https://www.rfc-editor.org/rfc/rfc7518#section-3
+	ECPublicKey struct {
+		BaseKey
+		Key *ecdsa.PublicKey
+	}
+	// https://www.rfc-editor.org/rfc/rfc7518#section-3
+	SymetricKey struct {
+		BaseKey
+		Key []byte
+	}
+	// TODO : https://www.rfc-editor.org/rfc/rfc7518#section-4
+	// TODO : https://www.rfc-editor.org/rfc/rfc7518#section-5
+)
+
+func (key *UnknownKey) Kty() KeyType {
+	return key.KeyType
+}
+func (key *RSAPrivateKey) Kty() KeyType {
+	return KeyTypeRSA
+}
+func (key *RSAPublicKey) Kty() KeyType {
+	return KeyTypeRSA
+}
+func (key *ECPrivateKey) Kty() KeyType {
+	return KeyTypeEC
+}
+func (key *ECPublicKey) Kty() KeyType {
+	return KeyTypeEC
+}
+func (key *SymetricKey) Kty() KeyType {
+	return KeyTypeOctet
 }
 
-// Return Last Key from Set
-// If there is no key, it return nil (runtime safe)
-func (set *Set) Last() *Key {
-	if len(set.Keys) > 0 {
-		return set.Keys[len(set.Keys)-1]
-	}
-	return nil
+func (key *BaseKey) Use() KeyUse {
+	return key.KeyUse
 }
 
-// Return Specified Key from Set
-// If there is no key, it return nil (runtime safe)
-// In RFC 7517, there is duplicated named key(but different KeyType)
-// However, it return first named key sorted by index(order of keys)
-// If you need to query, See Set.Gets
-func (set *Set) Get(kid string) *Key {
-	for _, k := range set.Keys {
-		if k.KeyID == kid {
-			return k
-		}
-	}
-	return nil
+func (key *BaseKey) KeyOps() KeyOps {
+	return key.KeyOperations
 }
 
-// Return Specified Keys from Set
-// If there is no key, it return empty slice(nil)
-func (set *Set) Gets(kid string) []*Key {
-	var result []*Key
-	for _, k := range set.Keys {
-		if k.KeyID == kid {
-			result = append(result, k)
-		}
-	}
-	return result
+func (key *BaseKey) Alg() Algorithm {
+	return key.Algorithm
 }
 
-// func (set *Set) Set(key *Key) *Key {
-// 	if len(set.Keys) > 0 {
-// 		return set.Keys[len(set.Keys)-1]
-// 	}
-// 	return nil
-// }
+func (key *BaseKey) Kid() string {
+	return key.KeyID
+}
 
-func (set *Set) UnmarshalJSON(bts []byte) error {
-	s, err := DecodeSetBy(context.Background(), bytes.NewReader(bts))
-	if err != nil {
-		return err
-	}
-	*set = *s
-	return nil
+func (key *BaseKey) X5u() *url.URL {
+	return key.X509URL
+}
+
+func (key *BaseKey) X5c() []*x509.Certificate {
+	return key.X509CertChain
+}
+
+func (key *BaseKey) X5t() []byte {
+	return key.X509CertThumbprint
+}
+
+func (key *BaseKey) X5tS256() []byte {
+	return key.X509CertThumbprintS256
+}
+
+func (key *BaseKey) Extra() map[string]interface{} {
+	return key.extra
 }
 
 func (set *Set) MarshalJSON() ([]byte, error) {
@@ -98,19 +148,202 @@ func (set *Set) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (key *Key) UnmarshalJSON(bts []byte) error {
-	k, err := DecodeKeyBy(context.Background(), bytes.NewReader(bts))
+func (set *Set) UnmarshalJSON(bts []byte) error {
+	rdr := bytes.NewReader(bts)
+	dat, err := DecodeSetBy(context.Background(), rdr)
 	if err != nil {
 		return err
 	}
-	*key = *k
+	*set = *dat
 	return nil
 }
 
-func (key *Key) MarshalJSON() ([]byte, error) {
+func (key *UnknownKey) intoUnknown() *UnknownKey {
+	return key
+}
+func (key *UnknownKey) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
+}
+
+func (key *UnknownKey) UnmarshalJSON(bts []byte) error {
+	rdr := bytes.NewReader(bts)
+	var opt *OptionDecodeKey
+	ctx := getContextValue(context.Background(), &opt, true)
+	opt.forceUnknownKey = true
+	dat, err := DecodeKeyBy(ctx, rdr)
+	if err != nil {
+		return err
+	}
+	*key = *(dat.intoUnknown())
+	return nil
+}
+
+func (key *RSAPrivateKey) intoUnknown() *UnknownKey {
+	res := new(UnknownKey)
+	bts, _ := key.MarshalJSON()
+	res.UnmarshalJSON(bts)
+	// TODO : Fatal error?
+	return res
+}
+func (key *RSAPrivateKey) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (key *RSAPrivateKey) UnmarshalJSON(bts []byte) error {
+	rdr := bytes.NewReader(bts)
+	var opt *OptionDecodeKey
+	ctx := getContextValue(context.Background(), &opt, true)
+	opt.constraintKeyType = KeyTypeRSA
+	dat, err := DecodeKeyBy(ctx, rdr)
+	if err != nil {
+		return err
+	}
+	*key = *(dat.(*RSAPrivateKey))
+	return nil
+}
+
+func (key *RSAPublicKey) intoUnknown() *UnknownKey {
+	res := new(UnknownKey)
+	bts, _ := key.MarshalJSON()
+	res.UnmarshalJSON(bts)
+	// TODO : Fatal error?
+	return res
+}
+func (key *RSAPublicKey) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+func (key *RSAPublicKey) UnmarshalJSON(bts []byte) error {
+	rdr := bytes.NewReader(bts)
+	var opt *OptionDecodeKey
+	ctx := getContextValue(context.Background(), &opt, true)
+	opt.constraintKeyType = KeyTypeRSA
+	dat, err := DecodeKeyBy(ctx, rdr)
+	if err != nil {
+		return err
+	}
+	*key = *(dat.(*RSAPublicKey))
+	return nil
+}
+
+func (key *ECPrivateKey) intoUnknown() *UnknownKey {
+	res := new(UnknownKey)
+	bts, _ := key.MarshalJSON()
+	res.UnmarshalJSON(bts)
+	// TODO : Fatal error?
+	return res
+}
+func (key *ECPrivateKey) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (key *ECPrivateKey) UnmarshalJSON(bts []byte) error {
+	rdr := bytes.NewReader(bts)
+	var opt *OptionDecodeKey
+	ctx := getContextValue(context.Background(), &opt, true)
+	opt.constraintKeyType = KeyTypeEC
+	dat, err := DecodeKeyBy(ctx, rdr)
+	if err != nil {
+		return err
+	}
+	*key = *(dat.(*ECPrivateKey))
+	return nil
+}
+
+func (key *ECPublicKey) intoUnknown() *UnknownKey {
+	res := new(UnknownKey)
+	bts, _ := key.MarshalJSON()
+	res.UnmarshalJSON(bts)
+	// TODO : Fatal error?
+	return res
+}
+func (key *ECPublicKey) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (key *ECPublicKey) UnmarshalJSON(bts []byte) error {
+	rdr := bytes.NewReader(bts)
+	var opt *OptionDecodeKey
+	ctx := getContextValue(context.Background(), &opt, true)
+	opt.constraintKeyType = KeyTypeEC
+	dat, err := DecodeKeyBy(ctx, rdr)
+	if err != nil {
+		return err
+	}
+	*key = *(dat.(*ECPublicKey))
+	return nil
+}
+
+func (key *SymetricKey) intoUnknown() *UnknownKey {
+	res := new(UnknownKey)
+	bts, _ := key.MarshalJSON()
+	res.UnmarshalJSON(bts)
+	// TODO : Fatal error?
+	return res
+}
+func (key *SymetricKey) MarshalJSON() ([]byte, error) {
+	buf := bytes.NewBuffer(nil)
+	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (key *SymetricKey) UnmarshalJSON(bts []byte) error {
+	rdr := bytes.NewReader(bts)
+	var opt *OptionDecodeKey
+	ctx := getContextValue(context.Background(), &opt, true)
+	opt.constraintKeyType = KeyTypeOctet
+	dat, err := DecodeKeyBy(ctx, rdr)
+	if err != nil {
+		return err
+	}
+	*key = *(dat.(*SymetricKey))
+	return nil
+}
+
+//
+func (set *Set) GetKey(kid string) Key {
+	for _, k := range set.Keys {
+		if k.Kid() == kid {
+			return k
+		}
+	}
+	return nil
+}
+func (set *Set) GetKeys(kid string) []Key {
+	res := make([]Key, 0, 1)
+	for _, k := range set.Keys {
+		if k.Kid() == kid {
+			res = append(res, k)
+		}
+	}
+	return res
+}
+func (set *Set) GetUniqueKey(kid string, kty KeyType) Key {
+	for _, k := range set.Keys {
+		if k.Kid() == kid && k.Kty() == kty {
+			return k
+		}
+	}
+	return nil
 }

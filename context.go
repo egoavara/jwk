@@ -2,6 +2,7 @@ package jwk
 
 import (
 	"context"
+	"crypto/tls"
 	"net/http"
 	"reflect"
 )
@@ -26,43 +27,59 @@ type (
 	OptionalFetchKey interface {
 		WithFetchKey(ctx context.Context) context.Context
 	}
-	// Option interface {
-	// 	Add(ctx context.Context) context.Context
-	// }
 )
 
 // options
 type (
-	OptionEncodeSet struct{}
-	OptionEncodeKey struct{}
+	OptionEncodeSet struct {
+		DisallowUnknownField bool
+	}
+	OptionEncodeKey struct {
+		DisallowUnknownField bool
+	}
 	OptionDecodeSet struct {
-		Strict bool
+		DisallowUnknownField bool
 	}
 	OptionDecodeKey struct {
-		AssignID    string
-		Strict      bool
-		Recalculate bool
-		NoValidate  bool
-		// From JWK Set
-		SelectByID string
+		// if len(KeyType) > 0, decode fail when `kty` != constraintKeyType
+		constraintKeyType        KeyType
+		forceUnknownKey          bool
+		AllowUnknownField        bool
+		DisallowUnknownAlgorithm bool
+		DisallowUnknownUse       bool
+		DisallowUnknownOp        bool
+		DisallowDuplicatedOps    bool
+		DisallowBothUseAndOps    bool
+		IgnorePrecomputed        bool
+		IgnoreValidate           bool
+		// For RSA Private Key, when this true, it ignore JWK define `dp`, `dq` and `qi` and precomputed values.
+		// Recalculate bool
+		// If this Value is true, Decoder don't execute key validation
+		// If you can trust key is safe set it true
+		// NoValidate bool
+		// If you want to select a specific key included in a set, use that handler.
+		// The handler uses the first value that returns true as the Key.
+		// That handler will check the key without kid last and iterate through the lexicographical order.
+		// If there is the same kid, it is checked in the order of EC, RSA, and oct using kty.
+		// If this value is set, the input of DecodeKey must be in Set format.
+		Selector func(Key) bool
+		HandleID func(*string) *string
 	}
-	OptionFetchSet struct {
-		Client *http.Client
-	}
-	OptionFetchKey struct {
+	OptionFetch struct {
 		Client *http.Client
 	}
 )
 
 // withs
 type (
-	withContext    struct{ context.Context }
-	withHTTPClient struct{ *http.Client }
-	withSelectByID struct{ kid string }
-	withStrict     struct{ strict bool }
-	withRecompute  struct{ recompute bool }
+	setupDecodeKey struct{ deck func(*OptionDecodeKey) }
+	withContext    struct{ context context.Context }
+	withHTTPClient struct{ clt *http.Client }
+	withSelector   struct{ selector func(Key) bool }
+	withHandleID   struct{ handleID func(*string) *string }
 )
 
+// utility function for context
 func getContextValue(ctx context.Context, ctxtype interface{}, orInsert bool) context.Context {
 	reflectCTXType := reflect.TypeOf(ctxtype)
 	switch ctxv := ctxtype.(type) {
@@ -102,24 +119,19 @@ func getContextValue(ctx context.Context, ctxtype interface{}, orInsert bool) co
 		if orInsert {
 			ctx = context.WithValue(ctx, reflectCTXType, *ctxv)
 		}
-	case **OptionFetchSet:
+	case **OptionFetch:
 		if v := ctx.Value(reflectCTXType); v != nil {
-			*ctxv = v.(*OptionFetchSet)
+			*ctxv = v.(*OptionFetch)
 			return ctx
 		}
-		*ctxv = &OptionFetchSet{
-			Client: http.DefaultClient,
-		}
-		if orInsert {
-			ctx = context.WithValue(ctx, reflectCTXType, *ctxv)
-		}
-	case **OptionFetchKey:
-		if v := ctx.Value(reflectCTXType); v != nil {
-			*ctxv = v.(*OptionFetchKey)
-			return ctx
-		}
-		*ctxv = &OptionFetchKey{
-			Client: http.DefaultClient,
+		*ctxv = &OptionFetch{
+			Client: &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						// InsecureSkipVerify:          true,
+					},
+				},
+			},
 		}
 		if orInsert {
 			ctx = context.WithValue(ctx, reflectCTXType, *ctxv)
@@ -130,29 +142,31 @@ func getContextValue(ctx context.Context, ctxtype interface{}, orInsert bool) co
 	return ctx
 }
 
+//
+
 // for any
 func WithContext(overide context.Context) *withContext {
 	return &withContext{
-		Context: overide,
+		context: overide,
 	}
 }
 func (w *withContext) WithEncodeSet(ctx context.Context) context.Context {
-	return w.Context
+	return w.context
 }
 func (w *withContext) WithEncodeKey(ctx context.Context) context.Context {
-	return w.Context
+	return w.context
 }
 func (w *withContext) WithDecodeSet(ctx context.Context) context.Context {
-	return w.Context
+	return w.context
 }
 func (w *withContext) WithDecodeKey(ctx context.Context) context.Context {
-	return w.Context
+	return w.context
 }
 func (w *withContext) WithFetchSet(ctx context.Context) context.Context {
-	return w.Context
+	return w.context
 }
 func (w *withContext) WithFetchKey(ctx context.Context) context.Context {
-	return w.Context
+	return w.context
 }
 
 // for
@@ -160,118 +174,143 @@ func (w *withContext) WithFetchKey(ctx context.Context) context.Context {
 //     `OptionalFetchKey`
 func WithHTTPClient(hclt *http.Client) *withHTTPClient {
 	return &withHTTPClient{
-		Client: hclt,
+		clt: hclt,
 	}
 }
 func (w *withHTTPClient) WithFetchSet(ctx context.Context) context.Context {
-	var ifset *OptionFetchSet
+	var ifset *OptionFetch
 	ctx = getContextValue(ctx, &ifset, true)
-	ifset.Client = w.Client
+	ifset.Client = w.clt
 	return ctx
 }
 func (w *withHTTPClient) WithFetchKey(ctx context.Context) context.Context {
-	var ifkey *OptionFetchKey
+	var ifkey *OptionFetch
 	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.Client = w.Client
+	ifkey.Client = w.clt
 	return ctx
 }
 
 // for
 //     `OptionalFetchKey`
 //     `OptionalDecodeKey`
-func WithSelectByID(kid string) *withSelectByID {
-	return &withSelectByID{
-		kid: kid,
+func WithSelector(selector func(Key) bool) *withSelector {
+	return &withSelector{
+		selector: selector,
 	}
 }
 
-func (w *withSelectByID) WithFetchKey(ctx context.Context) context.Context {
+func (w *withSelector) WithFetchKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
 	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.SelectByID = w.kid
+	ifkey.Selector = w.selector
 	return ctx
 }
 
-func (w *withSelectByID) WithDecodeKey(ctx context.Context) context.Context {
+func (w *withSelector) WithDecodeKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
 	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.SelectByID = w.kid
+	ifkey.Selector = w.selector
 	return ctx
 }
 
-// for
-//     `OptionalFetchSet`
-//     `OptionalFetchKey`
-//     `OptionalDecodeSet`
-//     `OptionalDecodeKey`
-func WithStrict(strict bool) *withStrict {
-	return &withStrict{
-		strict: strict,
-	}
-}
-func (w *withStrict) WithFetchSet(ctx context.Context) context.Context {
-	var ifset *OptionDecodeSet
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifset, true)
-	ctx = getContextValue(ctx, &ifkey, true)
-	ifset.Strict = w.strict
-	ifkey.Strict = w.strict
-	return ctx
-}
-func (w *withStrict) WithDecodeSet(ctx context.Context) context.Context {
-	var ifset *OptionDecodeSet
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifset, true)
-	ctx = getContextValue(ctx, &ifkey, true)
-	ifset.Strict = w.strict
-	ifkey.Strict = w.strict
-	return ctx
-}
-func (w *withStrict) WithFetchKey(ctx context.Context) context.Context {
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.Strict = w.strict
-	return ctx
-}
-func (w *withStrict) WithDecodeKey(ctx context.Context) context.Context {
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.Strict = w.strict
-	return ctx
-}
+// // for
+// //     `OptionalFetchSet`
+// //     `OptionalFetchKey`
+// //     `OptionalDecodeSet`
+// //     `OptionalDecodeKey`
+// func WithLevel(allowUnknown bool) *withAllowUnknown {
+// 	return &withAllowUnknown{
+// 		allowUnknown: allowUnknown,
+// 	}
+// }
+// func (w *withAllowUnknown) WithFetchSet(ctx context.Context) context.Context {
+// 	var ifkey *OptionDecodeKey
+// 	ctx = getContextValue(ctx, &ifkey, true)
+// 	ifkey.AllowUnknown = w.allowUnknown
+// 	return ctx
+// }
+// func (w *withAllowUnknown) WithDecodeSet(ctx context.Context) context.Context {
+// 	var ifkey *OptionDecodeKey
+// 	ctx = getContextValue(ctx, &ifkey, true)
+// 	ifkey.AllowUnknown = w.allowUnknown
+// 	return ctx
+// }
+// func (w *withAllowUnknown) WithFetchKey(ctx context.Context) context.Context {
+// 	var ifkey *OptionDecodeKey
+// 	ctx = getContextValue(ctx, &ifkey, true)
+// 	ifkey.AllowUnknown = w.allowUnknown
+// 	return ctx
+// }
+// func (w *withAllowUnknown) WithDecodeKey(ctx context.Context) context.Context {
+// 	var ifkey *OptionDecodeKey
+// 	ctx = getContextValue(ctx, &ifkey, true)
+// 	ifkey.AllowUnknown = w.allowUnknown
+// 	return ctx
+// }
 
 // for
 //     `OptionalFetchSet`
 //     `OptionalFetchKey`
 //     `OptionalDecodeSet`
 //     `OptionalDecodeKey`
-func WithRecompute(recompute bool) *withRecompute {
-	return &withRecompute{
-		recompute: recompute,
+func WithHandleID(handleID func(s *string) *string) *withHandleID {
+	return &withHandleID{
+		handleID: handleID,
 	}
 }
 
-func (w *withRecompute) WithFetchSet(ctx context.Context) context.Context {
+func (w *withHandleID) WithFetchSet(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
 	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.Recalculate = w.recompute
+	ifkey.HandleID = w.handleID
 	return ctx
 }
-func (w *withRecompute) WithDecodeSet(ctx context.Context) context.Context {
+func (w *withHandleID) WithDecodeSet(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
 	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.Recalculate = w.recompute
+	ifkey.HandleID = w.handleID
 	return ctx
 }
-func (w *withRecompute) WithFetchKey(ctx context.Context) context.Context {
+func (w *withHandleID) WithFetchKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
 	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.Recalculate = w.recompute
+	ifkey.HandleID = w.handleID
 	return ctx
 }
-func (w *withRecompute) WithDecodeKey(ctx context.Context) context.Context {
+func (w *withHandleID) WithDecodeKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
 	ctx = getContextValue(ctx, &ifkey, true)
-	ifkey.Recalculate = w.recompute
+	ifkey.HandleID = w.handleID
+	return ctx
+}
+
+func SetupDecodeKey(fn func(*OptionDecodeKey)) *setupDecodeKey {
+	return &setupDecodeKey{
+		deck: fn,
+	}
+}
+
+func (w *setupDecodeKey) WithFetchSet(ctx context.Context) context.Context {
+	var ifkey *OptionDecodeKey
+	ctx = getContextValue(ctx, &ifkey, true)
+	w.deck(ifkey)
+	return ctx
+}
+func (w *setupDecodeKey) WithDecodeSet(ctx context.Context) context.Context {
+	var ifkey *OptionDecodeKey
+	ctx = getContextValue(ctx, &ifkey, true)
+	w.deck(ifkey)
+	return ctx
+}
+func (w *setupDecodeKey) WithFetchKey(ctx context.Context) context.Context {
+	var ifkey *OptionDecodeKey
+	ctx = getContextValue(ctx, &ifkey, true)
+	w.deck(ifkey)
+	return ctx
+}
+func (w *setupDecodeKey) WithDecodeKey(ctx context.Context) context.Context {
+	var ifkey *OptionDecodeKey
+	ctx = getContextValue(ctx, &ifkey, true)
+	w.deck(ifkey)
 	return ctx
 }

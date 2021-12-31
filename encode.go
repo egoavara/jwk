@@ -10,7 +10,7 @@ import (
 	"math/big"
 )
 
-func EncodeKey(src *Key, dst io.Writer, options ...OptionalEncodeKey) error {
+func EncodeKey(src Key, dst io.Writer, options ...OptionalEncodeKey) error {
 	ctx := context.Background()
 	for _, option := range options {
 		ctx = option.WithEncodeKey(ctx)
@@ -18,64 +18,71 @@ func EncodeKey(src *Key, dst io.Writer, options ...OptionalEncodeKey) error {
 	return EncodeKeyBy(ctx, src, dst)
 }
 
-func EncodeKeyBy(ctx context.Context, src *Key, dst io.Writer) error {
+func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 	select {
 	case <-ctx.Done():
-		return ErrContextDone
+		return ErrAlreadyDone
 	default:
-		data := map[string]interface{}{"kty": src.KeyType}
-		if src.KeyUse.Exist() {
-			data["use"] = src.KeyUse
-		}
-		if len(src.KeyOperations) > 0 {
-			data["key_ops"] = src.KeyOperations
-		}
-		if src.Algorithm.Exist() {
-			data["alg"] = src.Algorithm
-		}
-		if src.Algorithm.Exist() {
-			data["alg"] = src.Algorithm
-		}
-		if len(src.KeyID) > 0 {
-			data["kid"] = src.KeyID
-		}
-		if src.X509URL != nil {
-			data["x5u"] = src.X509URL.String()
-		}
-		if len(src.X509CertChain) > 0 {
-			certs := make([]string, len(src.X509CertChain))
-			for i, c := range src.X509CertChain {
-				certs[i] = base64.StdEncoding.EncodeToString(c.Raw)
-			}
-			data["x5c"] = certs
-		}
-		if len(src.X509CertThumbprint) > 0 {
-			data["x5t"] = base64.StdEncoding.EncodeToString(src.X509CertThumbprint)
-		}
-		if len(src.X509CertThumbprintS256) > 0 {
-			data["x5t#S256"] = base64.URLEncoding.EncodeToString(src.X509CertThumbprintS256)
-		}
-
-		switch gokey := src.Raw.(type) {
-		case *rsa.PrivateKey:
-			if err := encodePriRSA(data, gokey); err != nil {
-				return err
-			}
-		case *rsa.PublicKey:
-			encodePubRSA(data, gokey)
-		case *ecdsa.PrivateKey:
-			encodePriEC(data, gokey)
-		case *ecdsa.PublicKey:
-			encodePubEC(data, gokey)
-		}
-		if err := json.NewEncoder(dst).Encode(data); err != nil {
-			return &ErrorDetail{
-				Cause:  ErrJSON,
-				Detail: err,
-			}
-		}
-		return nil
 	}
+	var option *OptionEncodeKey
+	getContextValue(ctx, &option, false)
+	data := map[string]interface{}{"kty": src.Kty()}
+	if src.Use().Exist() {
+		data["use"] = src.Use()
+	}
+	if len(src.KeyOps()) > 0 {
+		data["key_ops"] = src.KeyOps()
+	}
+	if src.Alg().Exist() {
+		data["alg"] = src.Alg()
+	}
+	if len(src.Kid()) > 0 {
+		data["kid"] = src.Kid()
+	}
+	if src.X5u() != nil {
+		data["x5u"] = src.X5u().String()
+	}
+	if len(src.X5c()) > 0 {
+		certs := make([]string, len(src.X5c()))
+		for i, c := range src.X5c() {
+			certs[i] = base64.StdEncoding.EncodeToString(c.Raw)
+		}
+		data["x5c"] = certs
+	}
+	if len(src.X5t()) > 0 {
+		data["x5t"] = base64.StdEncoding.EncodeToString(src.X5t())
+	}
+	if len(src.X5tS256()) > 0 {
+		data["x5t#S256"] = base64.URLEncoding.EncodeToString(src.X5tS256())
+	}
+
+	switch gokey := src.(type) {
+	case *RSAPrivateKey:
+		if err := encodePriRSA(data, gokey.Key); err != nil {
+			return err
+		}
+	case *RSAPublicKey:
+		encodePubRSA(data, gokey.Key)
+	case *ECPrivateKey:
+		encodePriEC(data, gokey.Key)
+	case *ECPublicKey:
+		encodePubEC(data, gokey.Key)
+	case *SymetricKey:
+		encodeSym(data, gokey.Key)
+	case *UnknownKey:
+	default:
+		// TODO :
+		panic("unimplemented")
+	}
+	if !option.DisallowUnknownField {
+		for k, v := range src.Extra() {
+			data[k] = v
+		}
+	}
+	if err := json.NewEncoder(dst).Encode(data); err != nil {
+		return wrapDetail(ErrInvalidJSON, err)
+	}
+	return nil
 }
 
 func encodePriRSA(data map[string]interface{}, prik *rsa.PrivateKey) error {
@@ -85,10 +92,10 @@ func encodePriRSA(data map[string]interface{}, prik *rsa.PrivateKey) error {
 		data["p"] = base64.URLEncoding.EncodeToString(prik.Primes[0].Bytes())
 		data["q"] = base64.URLEncoding.EncodeToString(prik.Primes[1].Bytes())
 	} else {
-		return errorCause(ErrKeyPriRSAFailed, "len(primes) : %d", len(prik.Primes))
+		return wrapDetailf(ErrPriRSAFailed, "len(primes) : %d", len(prik.Primes))
 	}
 	// make sure precomputed
-	// `Precompute` is do nothing when already precomputed, so it is safe
+	// `Precompute` is do nothing when already precomputed, so do it for safety
 	prik.Precompute()
 	data["dp"] = prik.Precomputed.Dp
 	data["dq"] = prik.Precomputed.Dq
@@ -113,6 +120,9 @@ func encodePubEC(data map[string]interface{}, pubk *ecdsa.PublicKey) {
 	data["y"] = base64.URLEncoding.EncodeToString(pubk.Y.Bytes())
 }
 
+func encodeSym(data map[string]interface{}, key []byte) {
+	data["k"] = base64.RawURLEncoding.EncodeToString(key)
+}
 func EncodeSet(src *Set, dst io.Writer, options ...OptionalEncodeSet) error {
 	ctx := context.Background()
 	for _, option := range options {
@@ -123,16 +133,13 @@ func EncodeSet(src *Set, dst io.Writer, options ...OptionalEncodeSet) error {
 func EncodeSetBy(ctx context.Context, src *Set, dst io.Writer) error {
 	select {
 	case <-ctx.Done():
-		return ErrContextDone
+		return ErrAlreadyDone
 	default:
 		err := json.NewEncoder(dst).Encode(map[string]interface{}{
 			"keys": src.Keys,
 		})
 		if err != nil {
-			return &ErrorDetail{
-				Cause:  ErrJSON,
-				Detail: err,
-			}
+			return wrapDetail(ErrInvalidJSON, err)
 		}
 		return nil
 	}

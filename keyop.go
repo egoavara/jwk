@@ -16,14 +16,6 @@ const (
 	KeyOpDeriveBits KeyOp = "deriveBits" // Derive bits not to be used as a key
 )
 
-func NewKeyOpsFromStr(ops ...string) KeyOps {
-	m := make(map[KeyOp]struct{})
-	for _, op := range ops {
-		m[KeyOp(op)] = struct{}{}
-	}
-	return KeyOps(m)
-}
-
 func (m KeyOps) In(op KeyOp) bool {
 	_, ok := m[op]
 	return ok
@@ -45,4 +37,70 @@ func (m KeyOps) Any(ops ...KeyOp) bool {
 		}
 	}
 	return false
+}
+func (ops KeyOps) IsValidCombination() bool {
+	if len(ops) > 2 {
+		return false
+	}
+	if len(ops) <= 1 {
+		return true
+	}
+	if _, ok := ops[KeyOpSign]; ok {
+		if _, ok := ops[KeyOpVerify]; ok {
+			return true
+		}
+	}
+	if _, ok := ops[KeyOpEncrypt]; ok {
+		if _, ok := ops[KeyOpDecrypt]; ok {
+			return true
+		}
+	}
+	if _, ok := ops[KeyOpWrapKey]; ok {
+		if _, ok := ops[KeyOpUnwrapKey]; ok {
+			return true
+		}
+	}
+	return false
+}
+func (ops KeyOps) Compatible(use KeyUse) bool {
+	// TODO : Is that right?
+	var trg KeyOp
+	switch use {
+	case KeyUseEnc:
+		trg = KeyOpUnwrapKey
+	case KeyUseSig:
+		trg = KeyOpVerify
+	}
+	_, ok := ops[trg]
+	return ok
+}
+func (ops KeyOps) AsSlice() []KeyOp {
+	slc := make([]KeyOp, 0, len(ops))
+	for k := range ops {
+		slc = append(slc, k)
+	}
+	return slc
+}
+
+func (op KeyOp) IsKnown() bool {
+	switch op {
+	case KeyOpSign:
+		fallthrough
+	case KeyOpVerify:
+		fallthrough
+	case KeyOpEncrypt:
+		fallthrough
+	case KeyOpDecrypt:
+		fallthrough
+	case KeyOpWrapKey:
+		fallthrough
+	case KeyOpUnwrapKey:
+		fallthrough
+	case KeyOpDeriveKey:
+		fallthrough
+	case KeyOpDeriveBits:
+		return true
+	default:
+		return false
+	}
 }

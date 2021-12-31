@@ -48,10 +48,7 @@ func (fn OnRefreshAfter) HandleRefresh(r *Refresh) { r.OnRefreshAfter = fn }
 func NewFetcher(urlloc interface{}, opts ...FetcherOption) (*Fetcher, error) {
 	realurlloc, err := utilURL(urlloc)
 	if err != nil {
-		return nil, &ErrorDetail{
-			Cause:  ErrInvalidURL,
-			Detail: err,
-		}
+		return nil, wrapDetail(ErrInvalidURL, err)
 	}
 	fet := LazyFetcher(realurlloc, opts...)
 	_, err = fet.Refresh()
