@@ -159,3 +159,83 @@ func (alg Algorithm) IsKnown() bool {
 func (alg Algorithm) Exist() bool {
 	return len(alg) > 0
 }
+
+func (alg Algorithm) IntoKeyType() KeyType {
+	switch alg {
+	case AlgorithmHS256:
+		return KeyTypeOctet
+	case AlgorithmHS384:
+		return KeyTypeOctet
+	case AlgorithmHS512:
+		return KeyTypeOctet
+	case AlgorithmRS256:
+		return KeyTypeRSA
+	case AlgorithmRS384:
+		return KeyTypeRSA
+	case AlgorithmRS512:
+		return KeyTypeRSA
+	case AlgorithmES256:
+		return KeyTypeEC
+	case AlgorithmES384:
+		return KeyTypeEC
+	case AlgorithmES512:
+		return KeyTypeEC
+	case AlgorithmPS256:
+		return KeyTypeRSA
+	case AlgorithmPS384:
+		return KeyTypeRSA
+	case AlgorithmPS512:
+		return KeyTypeRSA
+	case AlgorithmRSA1_5:
+		return KeyTypeRSA
+	case AlgorithmRSAOAEP:
+		return KeyTypeRSA
+	case AlgorithmRSAOAEP256:
+		return KeyTypeRSA
+	case AlgorithmA128KW:
+		return KeyTypeOctet
+	case AlgorithmA192KW:
+		return KeyTypeOctet
+	case AlgorithmA256KW:
+		return KeyTypeOctet
+	case AlgorithmECDHES:
+		return KeyTypeEC
+	case AlgorithmECDHES_A128KW:
+		return KeyTypeEC
+	case AlgorithmECDHES_A192KW:
+		return KeyTypeEC
+	case AlgorithmECDHES_A256KW:
+		return KeyTypeEC
+	case AlgorithmA128GCMKW:
+		return KeyTypeOctet
+	case AlgorithmA192GCMKW:
+		return KeyTypeOctet
+	case AlgorithmA256GCMKW:
+		return KeyTypeOctet
+	case AlgorithmNone:
+		// TODO : panics
+		panic("TODO : what to do AlgorithmNone?")
+	case AlgorithmDir:
+		panic("TODO : what is AlgorithmDir?")
+	case AlgorithmPBES2_HS256_A128KW:
+		panic("TODO : what is AlgorithmPBES2_HS256_A128KW?")
+	case AlgorithmPBES2_HS384_A192KW:
+		panic("TODO : what is AlgorithmPBES2_HS384_A192KW?")
+	case AlgorithmPBES2_HS512_A256KW:
+		panic("TODO : what is AlgorithmPBES2_HS512_A256KW?")
+	case AlgorithmA128CBC_HS256:
+		panic("TODO : what is AlgorithmA128CBC_HS256?")
+	case AlgorithmA192CBC_HS384:
+		panic("TODO : what is AlgorithmA192CBC_HS384?")
+	case AlgorithmA256CBC_HS512:
+		panic("TODO : what is AlgorithmA256CBC_HS512?")
+	case AlgorithmA128GCM:
+		panic("TODO : what is AlgorithmA128GCM?")
+	case AlgorithmA192GCM:
+		panic("TODO : what is AlgorithmA192GCM?")
+	case AlgorithmA256GCM:
+		panic("TODO : what is AlgorithmA256GCM?")
+	default:
+		panic("TODO : what to do?")
+	}
+}

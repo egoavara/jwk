@@ -1,6 +1,8 @@
 package jwk
 
-import "strings"
+import (
+	"strings"
+)
 
 type keys []Key
 

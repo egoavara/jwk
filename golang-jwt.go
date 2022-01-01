@@ -1,6 +1,10 @@
 package jwk
 
-import "github.com/golang-jwt/jwt/v4"
+import (
+	"errors"
+
+	"github.com/golang-jwt/jwt/v4"
+)
 
 type (
 	OptionalJWTVerifier interface {
@@ -8,10 +12,12 @@ type (
 	}
 	fnOptionalJWTVerifier func(*OptionJWTVerifier)
 	OptionJWTVerifier     struct {
-		GuessKey bool
+		WithoutGuessKey bool
+		IgnoreJOSEJWS   bool
+		IgnoreJOSEJWK   bool
 	}
 	JWTVerifier interface {
-		Keyfunc() jwt.Keyfunc
+		Keyfunc(*jwt.Token) (interface{}, error)
 	}
 	JWTVerifierFromFetcher struct {
 		OptionJWTVerifier
@@ -25,25 +31,28 @@ type (
 		OptionJWTVerifier
 		Key Key
 	}
+	// JWTVerifierFromToken is using JOSE Header like `jku`, `jwk`
 	JWTVerifierFromToken struct {
 		OptionJWTVerifier
-		Key Key
 	}
 )
+
+var ErrNoKeyForVerifier = errors.New("no key for verifier")
 
 func (fn fnOptionalJWTVerifier) WithJWTVerifier(opt *OptionJWTVerifier) {
 	fn(opt)
 }
 
 func WithGuess(guess bool) OptionalJWTVerifier {
-	return fnOptionalJWTVerifier(func(oj *OptionJWTVerifier) { oj.GuessKey = guess })
+	return fnOptionalJWTVerifier(func(oj *OptionJWTVerifier) { oj.WithoutGuessKey = !guess })
 }
 
-// source can be one of `*Set`, `Key`
+// source can be one of `*Set`, `Key`, `*Fetcher`, `<nil>`
 // It can be nil return, if source is unknown type or <nil>
+// when source is <nil>, it return JWTVerifierFromToken
 func LetJWT(source interface{}, options ...OptionalJWTVerifier) jwt.Keyfunc {
 	if ver := NewJWTVerifier(source); ver != nil {
-		return ver.Keyfunc()
+		return ver.Keyfunc
 	}
 	return nil
 }
@@ -90,19 +99,87 @@ func NewJWTVerifierFromFetcher(fetcher *Fetcher, options ...OptionalJWTVerifier)
 	}
 	return v
 }
-func (ver *JWTVerifierFromFetcher) Keyfunc() jwt.Keyfunc {
-	return func(t *jwt.Token) (interface{}, error) {
-		key, err := ver.Fetcher.Maybe()
-		if err != nil {
-			return nil, err
-		}
-		t.Header
-
+func (ver *JWTVerifierFromFetcher) Keyfunc(tk *jwt.Token) (interface{}, error) {
+	set, err := ver.Fetcher.Maybe()
+	if err != nil {
+		return nil, err
 	}
+	var k Key
+	if !ver.WithoutGuessKey {
+		k = keyguess(set, tk)
+	} else {
+		k = set.GetUniqueKey(tk.Header["kid"].(string), Algorithm(tk.Header["alg"].(string)).IntoKeyType())
+	}
+	if k != nil {
+		if itf := k.IntoKey(); itf != nil {
+			return itf, nil
+		} else {
+			// TODO : More detailed error
+			return nil, ErrNoKeyForVerifier
+		}
+	}
+	return nil, ErrNoKeyForVerifier
 }
-func (ver *JWTVerifierFromKey) Keyfunc() jwt.Keyfunc {
-
+func (ver *JWTVerifierFromKey) Keyfunc(tk *jwt.Token) (interface{}, error) {
+	if isValidKeyForToken(ver.Key, tk) {
+		if itf := ver.Key.IntoKey(); itf != nil {
+			return itf, nil
+		} else {
+			// TODO : More detailed error
+			return nil, ErrNoKeyForVerifier
+		}
+	}
+	return nil, ErrNoKeyForVerifier
 }
-func (ver *JWTVerifierFromSet) Keyfunc() jwt.Keyfunc {
+func (ver *JWTVerifierFromSet) Keyfunc(tk *jwt.Token) (interface{}, error) {
+	var k Key
+	if !ver.WithoutGuessKey {
+		k = keyguess(ver.Set, tk)
+	} else {
+		k = ver.Set.GetUniqueKey(tk.Header["kid"].(string), Algorithm(tk.Header["alg"].(string)).IntoKeyType())
+	}
+	if k != nil {
+		if itf := k.IntoKey(); itf != nil {
+			return itf, nil
+		} else {
+			// TODO : More detailed error
+			return nil, ErrNoKeyForVerifier
+		}
+	}
+	return nil, ErrNoKeyForVerifier
+}
 
+func keyguess(set *Set, token *jwt.Token) Key {
+	if kid, ok := token.Header["kid"]; ok {
+		skid, ok := kid.(string)
+		if !ok {
+			// TODO : kid must be string
+			return nil
+		}
+		keys := set.GetKeys(skid)
+		switch len(keys) {
+		case 0:
+		case 1:
+			if isValidKeyForToken(keys[0], token) {
+				return keys[0]
+			}
+		default:
+			for _, k := range keys {
+				if isValidKeyForToken(k, token) {
+					return k
+				}
+			}
+		}
+		return nil
+	}
+	return nil
+}
+func isValidKeyForToken(key Key, token *jwt.Token) bool {
+	// alg field must be exist
+	if dat, ok := token.Header["alg"].(string); ok {
+		return IsCompatibleKey(key, Algorithm(dat))
+	} else {
+		// TODO : alg must be string but got other type
+		return false
+	}
 }

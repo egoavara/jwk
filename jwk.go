@@ -3,6 +3,7 @@ package jwk
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
@@ -34,6 +35,10 @@ type Key interface {
 	X5t() []byte
 	X5tS256() []byte
 	Extra() map[string]interface{}
+	//
+	IntoKey() interface{}
+	IntoPublicKey() crypto.PublicKey
+	IntoPrivateKey() crypto.PrivateKey
 	//
 	intoUnknown() *UnknownKey
 }
@@ -182,6 +187,18 @@ func (key *UnknownKey) UnmarshalJSON(bts []byte) error {
 	return nil
 }
 
+func (key *UnknownKey) IntoKey() interface{} {
+	return nil
+}
+
+func (key *UnknownKey) IntoPublicKey() crypto.PublicKey {
+	return nil
+}
+
+func (key *UnknownKey) IntoPrivateKey() crypto.PrivateKey {
+	return nil
+}
+
 func (key *RSAPrivateKey) intoUnknown() *UnknownKey {
 	res := new(UnknownKey)
 	bts, _ := key.MarshalJSON()
@@ -189,6 +206,7 @@ func (key *RSAPrivateKey) intoUnknown() *UnknownKey {
 	// TODO : Fatal error?
 	return res
 }
+
 func (key *RSAPrivateKey) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
@@ -208,6 +226,18 @@ func (key *RSAPrivateKey) UnmarshalJSON(bts []byte) error {
 	}
 	*key = *(dat.(*RSAPrivateKey))
 	return nil
+}
+
+func (key *RSAPrivateKey) IntoKey() interface{} {
+	return key.Key
+}
+
+func (key *RSAPrivateKey) IntoPublicKey() crypto.PublicKey {
+	return key.Key.Public()
+}
+
+func (key *RSAPrivateKey) IntoPrivateKey() crypto.PrivateKey {
+	return key.Key
 }
 
 func (key *RSAPublicKey) intoUnknown() *UnknownKey {
@@ -237,6 +267,18 @@ func (key *RSAPublicKey) UnmarshalJSON(bts []byte) error {
 	return nil
 }
 
+func (key *RSAPublicKey) IntoKey() interface{} {
+	return key.Key
+}
+
+func (key *RSAPublicKey) IntoPublicKey() crypto.PublicKey {
+	return key.Key
+}
+
+func (key *RSAPublicKey) IntoPrivateKey() crypto.PrivateKey {
+	return nil
+}
+
 func (key *ECPrivateKey) intoUnknown() *UnknownKey {
 	res := new(UnknownKey)
 	bts, _ := key.MarshalJSON()
@@ -244,6 +286,7 @@ func (key *ECPrivateKey) intoUnknown() *UnknownKey {
 	// TODO : Fatal error?
 	return res
 }
+
 func (key *ECPrivateKey) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
@@ -265,6 +308,18 @@ func (key *ECPrivateKey) UnmarshalJSON(bts []byte) error {
 	return nil
 }
 
+func (key *ECPrivateKey) IntoKey() interface{} {
+	return key.Key
+}
+
+func (key *ECPrivateKey) IntoPublicKey() crypto.PublicKey {
+	return key.Key.Public()
+}
+
+func (key *ECPrivateKey) IntoPrivateKey() crypto.PrivateKey {
+	return key.Key
+}
+
 func (key *ECPublicKey) intoUnknown() *UnknownKey {
 	res := new(UnknownKey)
 	bts, _ := key.MarshalJSON()
@@ -272,6 +327,7 @@ func (key *ECPublicKey) intoUnknown() *UnknownKey {
 	// TODO : Fatal error?
 	return res
 }
+
 func (key *ECPublicKey) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	if err := EncodeKeyBy(context.Background(), key, buf); err != nil {
@@ -290,6 +346,17 @@ func (key *ECPublicKey) UnmarshalJSON(bts []byte) error {
 		return err
 	}
 	*key = *(dat.(*ECPublicKey))
+	return nil
+}
+func (key *ECPublicKey) IntoKey() interface{} {
+	return key.Key
+}
+
+func (key *ECPublicKey) IntoPublicKey() crypto.PublicKey {
+	return key.Key
+}
+
+func (key *ECPublicKey) IntoPrivateKey() crypto.PrivateKey {
 	return nil
 }
 
@@ -320,6 +387,17 @@ func (key *SymetricKey) UnmarshalJSON(bts []byte) error {
 	*key = *(dat.(*SymetricKey))
 	return nil
 }
+func (key *SymetricKey) IntoKey() interface{} {
+	return key.Key
+}
+
+func (key *SymetricKey) IntoPublicKey() crypto.PublicKey {
+	return nil
+}
+
+func (key *SymetricKey) IntoPrivateKey() crypto.PrivateKey {
+	return nil
+}
 
 //
 func (set *Set) GetKey(kid string) Key {
@@ -346,4 +424,21 @@ func (set *Set) GetUniqueKey(kid string, kty KeyType) Key {
 		}
 	}
 	return nil
+}
+
+// In RFC, key's `alg` header is optional
+// So if there is no defined algorithm, you need to guess it is compatible algorithm
+func IsCompatibleKey(key Key, alg Algorithm) bool {
+	if len(alg) <= 0 {
+		// TODO : panic?
+		return false
+	}
+	if keyalg := key.Alg(); len(keyalg) > 0 {
+		return keyalg == alg
+	}
+	// TODO : key check steps
+	// if key.Kty() != alg.IntoKeyType() {
+	// 	return false
+	// }
+	return false
 }
