@@ -5,83 +5,114 @@ import (
 	"fmt"
 )
 
-type (
-	errWrapIndex struct {
-		Index  int
-		Origin error
-	}
-	errWrapDetail struct {
-		Origin error
-		Detail string
-	}
-	errWrapField struct {
-		Origin error
-		Field  string
-	}
-)
-
 var (
-	ErrAlreadyDone  = errors.New("context already done")
-	ErrX509         = errors.New("x509 failed")
-	ErrBase64       = errors.New("base64 failed")
-	ErrInvalidURL   = errors.New("invalid url")
-	ErrInvalidJSON  = errors.New("invalid json")
-	ErrHTTPRequest  = errors.New("http request failed")
-	ErrNotFoundKey  = errors.New("not found key")
-	ErrRequirement  = errors.New("not satisfied requirement")
-	ErrPubECFailed  = errors.New("ec public key failed")
-	ErrPriECFailed  = errors.New("ec private key failed")
-	ErrPubRSAFailed = errors.New("rsa public key failed")
-	ErrPriRSAFailed = errors.New("rsa private key failed")
-	ErrUnknownField = errors.New("unknown field")
+	ErrAlreadyDone        = errors.New("context already done")
+	ErrNilSource          = errors.New("source must be not <nil>")
+	ErrRequirement        = errors.New("not satisfied requirement")
+	ErrHTTPRequest        = errors.New("http request failed")
+	ErrNotExist           = errors.New("not exist")
+	ErrInnerKey           = errors.New("inner key failed")
+	ErrInvalidString      = errors.New("invalid string")
+	ErrInvalidArrayString = errors.New("invalid []string")
+	ErrInvalidArrayObject = errors.New("invalid []object")
+	ErrInvalidObject      = errors.New("invalid object")
+	ErrInvalidURL         = errors.New("invalid url")
+	ErrInvalidX509        = errors.New("invalid x509")
+	ErrInvalidJSON        = errors.New("invalid json")
+	ErrInvalidBase64Url   = errors.New("invalid base64 url")
+	ErrInvalidBase64Std   = errors.New("invalid base64 std")
+)
+var (
+	ErrCauseOption        = errors.New("cause option")
+	ErrCauseECPublicKey   = errors.New("ec public key failed")
+	ErrCauseECPrivateKey  = errors.New("ec private key failed")
+	ErrCauseRSAPublicKey  = errors.New("rsa public key failed")
+	ErrCauseRSAPrivateKey = errors.New("rsa public key failed")
+	ErrCauseSymetricKey   = errors.New("symetric key failed")
+)
+var ()
+
+type (
+	wrapError struct {
+		parent  error
+		current error
+	}
+	fieldError struct {
+		field string
+	}
+	indexError struct {
+		index int
+	}
 )
 
-func wrapDetail(cause error, detail error) error {
-	return &errWrapDetail{
-		Origin: cause,
-		Detail: detail.Error(),
+func mkErrors(err ...error) error {
+	if len(err) == 0 {
+		return nil
+	}
+	left := err[:len(err)-1]
+	current := err[len(err)-1]
+	return &wrapError{
+		parent:  mkErrors(left...),
+		current: current,
 	}
 }
-func wrapDetailf(cause error, format string, args ...interface{}) error {
-
-	return &errWrapDetail{
-		Origin: cause,
-		Detail: fmt.Sprintf(format, args...),
-	}
-}
-func wrapField(cause error, field string) error {
-	return &errWrapField{
-		Origin: cause,
-		Field:  field,
-	}
-}
-func wrapIndex(cause error, index int) error {
-	return &errWrapIndex{
-		Origin: cause,
-		Index:  index,
+func replaceErrors(err error, from error, to error) {
+	for ; errors.Is(err, from); err = errors.Unwrap(err) {
+		if k, ok := err.(*wrapError); ok {
+			if errors.Is(k.current, from) {
+				k.current = to
+			}
+		}
 	}
 }
 
-func (e *errWrapDetail) Error() string {
-	return fmt.Sprintf("%v cause '%v'", e.Origin, e.Detail)
+func IndexError(index int) error {
+	return &indexError{
+		index: index,
+	}
 }
 
-func (e *errWrapDetail) Unwrap() error {
-	return e.Origin
+func FieldError(field string) error {
+	return &fieldError{
+		field: field,
+	}
 }
 
-func (e *errWrapField) Error() string {
-	return fmt.Sprintf("%v in %v", e.Origin, e.Field)
+func (ie *indexError) Error() string {
+	return fmt.Sprintf("[%d]", ie.index)
+}
+func (fe *fieldError) Error() string {
+	return fmt.Sprintf("'%d'", fe.field)
 }
 
-func (e *errWrapField) Unwrap() error {
-	return e.Origin
+func (we *wrapError) Error() string {
+	if we.parent != nil {
+		return ""
+	}
+	cerr := we.current.Error()
+	if len(cerr) == 0 {
+		return fmt.Sprintf("%v", we.parent)
+	}
+	return fmt.Sprintf("%v, %s", we.parent, cerr)
 }
-
-func (e *errWrapIndex) Error() string {
-	return fmt.Sprintf("%v at %v", e.Origin, e.Index)
+func (we *wrapError) Unwrap() error {
+	return we.parent
 }
-
-func (e *errWrapIndex) Unwrap() error {
-	return e.Origin
+func (we *wrapError) As(i interface{}) bool {
+	if errors.As(we.current, i) {
+		return true
+	}
+	if we.parent != nil {
+		return errors.As(we.parent, i)
+	}
+	return false
+}
+func (we *wrapError) Is(other error) bool {
+	if errors.Is(we.current, other) {
+		return true
+	}
+	if we.parent != nil {
+		return errors.Is(we.parent, other)
+	}
+	return false
 }

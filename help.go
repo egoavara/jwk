@@ -3,7 +3,6 @@ package jwk
 import (
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -27,15 +26,19 @@ func utilURL(rurl interface{}) (*url.URL, error) {
 		if reflectVal.Type().ConvertibleTo(reflectStr) {
 			return utilURL(reflectVal.Convert(reflectStr).Interface())
 		}
-		return nil, fmt.Errorf("unsupported url type %T", v)
+		return nil, mkErrors(ErrInvalidURL, fmt.Errorf("unsupported url type %T", v))
 	}
 }
 func utilResponse(rurl *url.URL, ctx context.Context, clt *http.Client) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", rurl.String(), nil)
 	if err != nil {
-		return nil, err
+		return nil, mkErrors(ErrHTTPRequest, err)
 	}
-	return clt.Do(req)
+	res, err := clt.Do(req)
+	if err != nil {
+		return nil, mkErrors(ErrHTTPRequest, err)
+	}
+	return res, nil
 }
 
 func utilInterfaceOr(i interface{}, vdefault interface{}) interface{} {
@@ -44,11 +47,6 @@ func utilInterfaceOr(i interface{}, vdefault interface{}) interface{} {
 	}
 	return i
 }
-
-var (
-	errKeyNotExist = errors.New("key not exist")
-	errInvalidType = errors.New("unvalid type")
-)
 
 func utilConsumeURL(m map[string]interface{}, k string) (*url.URL, error) {
 	surl, err := utilConsumeStr(m, k)
@@ -64,9 +62,9 @@ func utilConsumeStr(m map[string]interface{}, k string) (string, error) {
 			delete(m, k)
 			return s, nil
 		}
-		return "", errInvalidType
+		return "", ErrInvalidString
 	}
-	return "", errKeyNotExist
+	return "", ErrNotExist
 }
 func utilConsumeArrStr(m map[string]interface{}, k string) ([]string, error) {
 	if v, ok := m[k]; ok {
@@ -78,9 +76,9 @@ func utilConsumeArrStr(m map[string]interface{}, k string) ([]string, error) {
 			}
 			return res, nil
 		}
-		return nil, errInvalidType
+		return nil, ErrInvalidArrayString
 	}
-	return nil, errKeyNotExist
+	return nil, ErrNotExist
 }
 func utilConsumeArrMap(m map[string]interface{}, k string) ([]map[string]interface{}, error) {
 	if v, ok := m[k]; ok {
@@ -92,9 +90,9 @@ func utilConsumeArrMap(m map[string]interface{}, k string) ([]map[string]interfa
 			}
 			return res, nil
 		}
-		return nil, errInvalidType
+		return nil, ErrInvalidArrayObject
 	}
-	return nil, errKeyNotExist
+	return nil, ErrNotExist
 }
 func utilConsumeMap(m map[string]interface{}, k string) (map[string]interface{}, error) {
 	if v, ok := m[k]; ok {
@@ -102,21 +100,20 @@ func utilConsumeMap(m map[string]interface{}, k string) (map[string]interface{},
 			delete(m, k)
 			return s, nil
 		}
-		return nil, errInvalidType
+		return nil, ErrInvalidObject
 	}
-	return nil, errKeyNotExist
+	return nil, ErrNotExist
 }
 
 func utilConsumeB64url(m map[string]interface{}, k string) ([]byte, error) {
 	if s, err := utilConsumeStr(m, k); err == nil {
-
 		bts, err := base64.RawURLEncoding.DecodeString(s)
 		if err != nil {
-			return nil, err
+			return nil, mkErrors(ErrInvalidBase64Url, err)
 		}
 		return bts, nil
 	} else {
-		return nil, err
+		return nil, mkErrors(ErrInvalidBase64Url, err)
 	}
 }
 
@@ -124,10 +121,10 @@ func utilConsumeB64std(m map[string]interface{}, k string) ([]byte, error) {
 	if s, err := utilConsumeStr(m, k); err == nil {
 		bts, err := base64.RawStdEncoding.DecodeString(s)
 		if err != nil {
-			return nil, err
+			return nil, mkErrors(ErrInvalidBase64Std, err)
 		}
 		return bts, nil
 	} else {
-		return nil, err
+		return nil, mkErrors(ErrInvalidBase64Std, err)
 	}
 }
