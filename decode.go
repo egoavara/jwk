@@ -13,7 +13,6 @@ import (
 	"io"
 	"math/big"
 	"sort"
-	"strings"
 )
 
 func DecodeKey(reader io.Reader, options ...OptionalDecodeKey) (Key, error) {
@@ -464,22 +463,11 @@ func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
 		return nil, mkErrors(ErrRequirement, FieldError("keys"), ErrNotExist)
 	}
 	if option.DisallowUnknownField && len(data) > 0 {
-		const _MAXSAMPLE = 5
-		ssmp := new(strings.Builder)
-		counter := 0
-		ssmp.WriteString("[")
+		var errs []error
 		for k := range data {
-			if counter > _MAXSAMPLE {
-				ssmp.WriteString("...")
-				break
-			}
-			ssmp.WriteString(k)
-			ssmp.WriteString(", ")
-			counter++
+			errs = append(errs, FieldError(k))
 		}
-		ssmp.WriteString("]")
-
-		return nil, wrapDetailf(ErrUnknownField, "unexpected %v", ssmp.String())
+		return nil, mkErrors(append([]error{ErrRequirement, ErrCauseOption}, errs...)...)
 	}
 	result.Extra = data
 	return result, nil

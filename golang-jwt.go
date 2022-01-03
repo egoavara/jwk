@@ -100,7 +100,7 @@ func NewJWTVerifierFromFetcher(fetcher *Fetcher, options ...OptionalJWTVerifier)
 	return v
 }
 func (ver *JWTVerifierFromFetcher) Keyfunc(tk *jwt.Token) (interface{}, error) {
-	set, err := ver.Fetcher.Maybe()
+	set, err := ver.Fetcher.Get()
 	if err != nil {
 		return nil, err
 	}

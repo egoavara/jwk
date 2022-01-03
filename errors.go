@@ -8,6 +8,7 @@ import (
 var (
 	ErrAlreadyDone        = errors.New("context already done")
 	ErrNilSource          = errors.New("source must be not <nil>")
+	ErrParameter          = errors.New("parameter")
 	ErrRequirement        = errors.New("not satisfied requirement")
 	ErrHTTPRequest        = errors.New("http request failed")
 	ErrNotExist           = errors.New("not exist")
@@ -30,7 +31,6 @@ var (
 	ErrCauseRSAPrivateKey = errors.New("rsa public key failed")
 	ErrCauseSymetricKey   = errors.New("symetric key failed")
 )
-var ()
 
 type (
 	wrapError struct {

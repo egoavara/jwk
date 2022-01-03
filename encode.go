@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/big"
 )
@@ -71,8 +72,6 @@ func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 		encodeSym(data, gokey.Key)
 	case *UnknownKey:
 	default:
-		// TODO :
-		panic("unimplemented")
 	}
 	if !option.DisallowUnknownField {
 		for k, v := range src.Extra() {
@@ -80,7 +79,8 @@ func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 		}
 	}
 	if err := json.NewEncoder(dst).Encode(data); err != nil {
-		return wrapDetail(ErrInvalidJSON, err)
+		// FIXME : maybe no errorj
+		return mkErrors(ErrInvalidJSON, err)
 	}
 	return nil
 }
@@ -92,7 +92,7 @@ func encodePriRSA(data map[string]interface{}, prik *rsa.PrivateKey) error {
 		data["p"] = base64.URLEncoding.EncodeToString(prik.Primes[0].Bytes())
 		data["q"] = base64.URLEncoding.EncodeToString(prik.Primes[1].Bytes())
 	} else {
-		return wrapDetailf(ErrPriRSAFailed, "len(primes) : %d", len(prik.Primes))
+		return mkErrors(ErrParameter, ErrCauseRSAPrivateKey, fmt.Errorf("len(primes) : %d", len(prik.Primes)))
 	}
 	// make sure precomputed
 	// `Precompute` is do nothing when already precomputed, so do it for safety
@@ -123,6 +123,7 @@ func encodePubEC(data map[string]interface{}, pubk *ecdsa.PublicKey) {
 func encodeSym(data map[string]interface{}, key []byte) {
 	data["k"] = base64.RawURLEncoding.EncodeToString(key)
 }
+
 func EncodeSet(src *Set, dst io.Writer, options ...OptionalEncodeSet) error {
 	ctx := context.Background()
 	for _, option := range options {
@@ -139,7 +140,7 @@ func EncodeSetBy(ctx context.Context, src *Set, dst io.Writer) error {
 			"keys": src.Keys,
 		})
 		if err != nil {
-			return wrapDetail(ErrInvalidJSON, err)
+			return mkErrors(ErrInvalidJSON, err)
 		}
 		return nil
 	}

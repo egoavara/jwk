@@ -2,6 +2,7 @@ package jwk
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 )
 
@@ -27,15 +28,15 @@ func FetchKeyBy(ctx context.Context, urlloc interface{}) (Key, error) {
 	//
 	rurlloc, err := utilURL(urlloc)
 	if err != nil {
-		return nil, wrapDetail(ErrInvalidURL, err)
+		return nil, err
 	}
 	res, err := utilResponse(rurlloc, ctx, option.Client)
 	if err != nil {
-		return nil, wrapDetail(ErrHTTPRequest, err)
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, wrapDetailf(ErrHTTPRequest, "unexpected status code %d", res.StatusCode)
+		return nil, mkErrors(ErrHTTPRequest, fmt.Errorf("unexpected status code %d", res.StatusCode))
 	}
 	return DecodeKeyBy(ctx, res.Body)
 }
@@ -46,15 +47,15 @@ func FetchSetBy(ctx context.Context, urlloc interface{}) (*Set, error) {
 	//
 	rurlloc, err := utilURL(urlloc)
 	if err != nil {
-		return nil, wrapDetail(ErrInvalidURL, err)
+		return nil, err
 	}
 	res, err := utilResponse(rurlloc, ctx, option.Client)
 	if err != nil {
-		return nil, wrapDetail(ErrHTTPRequest, err)
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, wrapDetailf(ErrHTTPRequest, "unexpected status code %d", res.StatusCode)
+		return nil, mkErrors(ErrHTTPRequest, fmt.Errorf("unexpected status code %d", res.StatusCode))
 	}
 	return DecodeSetBy(ctx, res.Body)
 }

@@ -48,7 +48,7 @@ func (fn OnRefreshAfter) HandleRefresh(r *Refresh) { r.OnRefreshAfter = fn }
 func NewFetcher(urlloc interface{}, opts ...FetcherOption) (*Fetcher, error) {
 	realurlloc, err := utilURL(urlloc)
 	if err != nil {
-		return nil, wrapDetail(ErrInvalidURL, err)
+		return nil, err
 	}
 	fet := LazyFetcher(realurlloc, opts...)
 	_, err = fet.Refresh()
@@ -76,27 +76,27 @@ func LazyFetcher(urlloc interface{}, opts ...FetcherOption) *Fetcher {
 	return fet
 }
 
-// `Must` mean if there is no resourece from origin(cause by network error, or server down, or many reason), it return PANIC!
+// `MustGet` mean if there is no resourece from origin(cause by network error, or server down, or many reason), it return PANIC!
 // So if you want to use this, take responsibility
 // If you want return NIL instead of PANIC, try `Should`
-func (fet *Fetcher) Must(opts ...RefreshOption) *Set {
-	if s, err := fet.Maybe(); err != nil {
+func (fet *Fetcher) MustGet(opts ...RefreshOption) *Set {
+	if s, err := fet.Get(); err != nil {
 		panic(err)
 	} else {
 		return s
 	}
 }
 
-// `Should` mean if refresh is failed,
-func (fet *Fetcher) Should(opts ...RefreshOption) *Set {
-	if s, err := fet.Maybe(); err != nil {
+// `ShouldGet` mean if refresh is failed,
+func (fet *Fetcher) ShouldGet(opts ...RefreshOption) *Set {
+	if s, err := fet.Get(); err != nil {
 		return nil
 	} else {
 		return s
 	}
 }
 
-func (fet *Fetcher) Maybe(opts ...RefreshOption) (*Set, error) {
+func (fet *Fetcher) Get(opts ...RefreshOption) (*Set, error) {
 	if fet.prev == nil || time.Now().After(fet.next) {
 		return fet.Refresh(opts...)
 	}
