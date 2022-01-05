@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math/big"
-	"sort"
 )
 
 func DecodeKey(reader io.Reader, options ...OptionalDecodeKey) (Key, error) {
@@ -40,9 +39,10 @@ func DecodeKeyBy(ctx context.Context, reader io.Reader) (Key, error) {
 		if err != nil {
 			return nil, err
 		}
-		ks := keys(set.Keys)
-		sort.Sort(&ks)
-		for _, k := range ks {
+		tmp := make([]Key, len(set.Keys))
+		copy(tmp, set.Keys)
+		SortKey(tmp)
+		for _, k := range tmp {
 			if option.Selector(k) {
 				return k, nil
 			}

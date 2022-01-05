@@ -1,10 +1,16 @@
 package jwk
 
 import (
+	"sort"
 	"strings"
 )
 
-type keys []Key
+func SortKey(keys []Key) {
+	tmp := keySortingHelper(keys)
+	sort.Sort(&tmp)
+}
+
+type keySortingHelper []Key
 
 var (
 	orderTable = map[KeyType]int{
@@ -14,11 +20,11 @@ var (
 	}
 )
 
-func (ks *keys) Len() int {
+func (ks *keySortingHelper) Len() int {
 	return len(*ks)
 }
 
-func (ks *keys) Less(i int, j int) bool {
+func (ks *keySortingHelper) Less(i int, j int) bool {
 	ki := (*ks)[i]
 	kj := (*ks)[j]
 	a := strings.Compare(ki.Kid(), kj.Kid())
@@ -30,7 +36,7 @@ func (ks *keys) Less(i int, j int) bool {
 	return a < 0
 }
 
-func (ks *keys) Swap(i int, j int) {
+func (ks *keySortingHelper) Swap(i int, j int) {
 	ki := (*ks)[i]
 	kj := (*ks)[j]
 	(*ks)[i] = kj

@@ -82,7 +82,7 @@ func (ie *indexError) Error() string {
 	return fmt.Sprintf("[%d]", ie.index)
 }
 func (fe *fieldError) Error() string {
-	return fmt.Sprintf("'%d'", fe.field)
+	return fmt.Sprintf("'%s'", fe.field)
 }
 
 func (we *wrapError) Error() string {
@@ -114,5 +114,6 @@ func (we *wrapError) Is(other error) bool {
 	if we.parent != nil {
 		return errors.Is(we.parent, other)
 	}
+
 	return false
 }
