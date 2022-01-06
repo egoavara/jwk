@@ -1,0 +1,5 @@
+{
+  "kty": "unknown",
+  "use": "sig",
+  "key_ops": ["verify"]
+}

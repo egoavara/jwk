@@ -1,4 +1,4 @@
 {
   "kty": "unknown",
-  "key_ops": ["sig", "sig"]
+  "key_ops": ["sign", "sign"]
 }

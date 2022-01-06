@@ -53,7 +53,11 @@ func utilConsumeURL(m map[string]interface{}, k string) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	return url.Parse(surl)
+	res, err := url.Parse(surl)
+	if err != nil {
+		return nil, mkErrors(ErrInvalidURL, err)
+	}
+	return res, nil
 }
 
 func utilConsumeStr(m map[string]interface{}, k string) (string, error) {

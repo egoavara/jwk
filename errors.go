@@ -14,7 +14,6 @@ var (
 	ErrNotExist           = errors.New("not exist")
 	ErrInnerKey           = errors.New("inner key failed")
 	ErrInvalidString      = errors.New("invalid string")
-	ErrInvalidByteLength  = errors.New("invalid byte length")
 	ErrInvalidArrayString = errors.New("invalid []string")
 	ErrInvalidArrayObject = errors.New("invalid []object")
 	ErrInvalidObject      = errors.New("invalid object")
@@ -35,12 +34,18 @@ var (
 	ErrCauseSymetricKey   = errors.New("symetric key failed")
 )
 var (
-	ErrKeyOpsInvalidCombination = errors.New("invalid combination")
-)
-var (
-	ErrDisallowUnkwownField  = errors.New("disallow unknown field")
-	ErrDisallowUnknownOp     = errors.New("disallow unknown op")
-	ErrDisallowDuplicatedOps = errors.New("disallow duplicated ops")
+	ErrECInvalidBytesLength     = errors.New("invalid byte length")
+	ErrNoSelectedKey            = errors.New("no selected key")
+	ErrNotExpectedKty           = errors.New("not expected kty")
+	ErrNotCompatible            = errors.New("not compatible")
+	ErrSHA1Size                 = errors.New("sha1 size")
+	ErrSHA256Size               = errors.New("sha256 size")
+	ErrInvalidCombination       = errors.New("invalid combination")
+	ErrDisallowBothUseKeyops    = errors.New("disallow both use and key_ops")
+	ErrDisallowUnkwownField     = errors.New("disallow unknown field")
+	ErrDisallowUnknownOp        = errors.New("disallow unknown op")
+	ErrDisallowUnknownAlgorithm = errors.New("disallow unknown algorithm")
+	ErrDisallowDuplicatedOps    = errors.New("disallow duplicated ops")
 )
 
 type (

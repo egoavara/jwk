@@ -1,6 +1,7 @@
 package jwk_test
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	_ "embed"
@@ -13,14 +14,89 @@ import (
 	"github.com/egoavara/jwk"
 )
 
+// test utils
+var (
+	//go:embed embeding/key-invalid.txt
+	keyInvalid string
+	//go:embed embeding/set-for-selector.json
+	setForSelector string
+)
+
 // base key fields
 var (
+	//go:embed embeding/basekey-kty-not-exist.json
+	basekeyKtyNotExist string
+	//go:embed embeding/basekey-kty-not-string.json
+	basekeyKtyNotString string
+
 	//go:embed embeding/basekey-use-valid.json
 	basekeyUseValid string
 	//go:embed embeding/basekey-use-untype.json
 	basekeyUseUntype string
 	//go:embed embeding/basekey-use-unknown.json
 	basekeyUseUnknown string
+
+	//go:embed embeding/basekey-key_ops-valid.json
+	basekeyKeyOpsValid string
+	//go:embed embeding/basekey-key_ops-untype.json
+	basekeyKeyOpsUntype string
+	//go:embed embeding/basekey-key_ops-unknown.json
+	basekeyKeyOpsUnknown string
+	//go:embed embeding/basekey-key_ops-duplicated.json
+	basekeyKeyOpsDuplicated string
+	//go:embed embeding/basekey-key_ops-combination.json
+	basekeyKeyOpsCombination string
+
+	//go:embed embeding/basekey-both-use-keyops-valid.json
+	basekeyBothUseKeyopsValid string
+	//go:embed embeding/basekey-both-use-keyops-invalid.json
+	basekeyBothUseKeyopsInvalid string
+
+	//go:embed embeding/basekey-alg-valid.json
+	basekeyAlgValid string
+	//go:embed embeding/basekey-alg-untype.json
+	basekeyAlgUntype string
+	//go:embed embeding/basekey-alg-unknown.json
+	basekeyAlgUnknown string
+
+	//go:embed embeding/basekey-kid-valid.json
+	basekeyKidValid string
+	//go:embed embeding/basekey-kid-untype.json
+	basekeyKidUntype string
+
+	//go:embed embeding/basekey-x5u-type.json
+	basekeyX5uType string
+	//go:embed embeding/basekey-x5u-unurl.json
+	basekeyX5uUnurl string
+	//go:embed embeding/basekey-x5u-untype.json
+	basekeyX5uUntype string
+
+	//go:embed embeding/basekey-x5c-tempvalid.json
+	basekeyX5cValid string
+	//go:embed embeding/basekey-x5c-untype.json
+	basekeyX5cUntype string
+	//go:embed embeding/basekey-x5c-b64.json
+	basekeyX5cB64 string
+	//go:embed embeding/basekey-x5c-x509.json
+	basekeyX5cX509 string
+
+	//go:embed embeding/basekey-x5t-tempvalid.json
+	basekeyX5tValid string
+	//go:embed embeding/basekey-x5t-invalid-size.json
+	basekeyX5tInvalidSize string
+	//go:embed embeding/basekey-x5t-not-string.json
+	basekeyX5tNotString string
+	//go:embed embeding/basekey-x5t-not-b64.json
+	basekeyX5tNotB64 string
+
+	//go:embed embeding/basekey-x5ts256-tempvalid.json
+	basekeyX5tS256Valid string
+	//go:embed embeding/basekey-x5ts256-invalid-size.json
+	basekeyX5tS256InvalidSize string
+	//go:embed embeding/basekey-x5ts256-not-string.json
+	basekeyX5tS256NotString string
+	//go:embed embeding/basekey-x5ts256-not-b64.json
+	basekeyX5tS256NotB64 string
 )
 
 // Unknown key
@@ -67,8 +143,15 @@ var (
 	ecPriWithoutX string
 	//go:embed embeding/ec-pri-without-y.json
 	ecPriWithoutY string
-	//go:embed embeding/ec-pri-invalid-d.json
-	ecPriInvalidD string
+	//go:embed embeding/ec-pri-not-string-d.json
+	ecPriNotStringD string
+
+	//go:embed embeding/ec-pri-invalid-length-d.json
+	ecPriInvalidLengthD string
+	//go:embed embeding/ec-pri-invalid-length-y.json
+	ecPriInvalidLengthY string
+	//go:embed embeding/ec-pri-invalid-length-x.json
+	ecPriInvalidLengthX string
 )
 
 // RSA public key
@@ -109,6 +192,16 @@ var (
 	rsaPriNoPrecomputed string
 )
 
+// Set
+var (
+	//go:embed embeding/set-unknown-field.json
+	setUnknownField string
+	//go:embed embeding/set-invalid-json.txt
+	setInvalidJSON string
+	//go:embed embeding/set-with-invalid-key.json
+	setWithInvalidKey string
+)
+
 func withoutField(fieldname string, t *testing.T, file io.Reader) {
 	t.Run(fmt.Sprintf("without '%s'", fieldname), func(t *testing.T) {
 		_, err := jwk.DecodeKey(file)
@@ -123,7 +216,118 @@ func withoutField(fieldname string, t *testing.T, file io.Reader) {
 		}
 	})
 }
-
+func TestDecodeKeySecrets(t *testing.T) {
+	t.Run("nil source", func(t *testing.T) {
+		_, err := jwk.DecodeKey(nil)
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrNilSource) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrNilSource)
+		}
+	})
+	t.Run("done context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := jwk.DecodeKeyBy(ctx, strings.NewReader(rsaPriValid))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrAlreadyDone) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrAlreadyDone)
+		}
+	})
+	t.Run("invalid json", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(keyInvalid))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidJSON) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidJSON)
+		}
+	})
+	t.Run("not exist", func(t *testing.T) {
+		var uk = new(jwk.UnknownKey)
+		err := uk.UnmarshalJSON([]byte(rsaPriValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+	})
+	t.Run("unmatched type", func(t *testing.T) {
+		var ecprik = new(jwk.ECPrivateKey)
+		err := ecprik.UnmarshalJSON([]byte(rsaPriValid))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrNotExpectedKty) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrNotExpectedKty)
+		}
+	})
+	t.Run("from set", func(t *testing.T) {
+		order := []jwk.Key{
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "A"}, KeyType: jwk.KeyTypeEC},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "B"}, KeyType: jwk.KeyTypeEC},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "B"}, KeyType: jwk.KeyTypeRSA},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "C"}, KeyType: jwk.KeyTypeEC},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "D"}, KeyType: jwk.KeyTypeEC},
+		}
+		_, err := jwk.DecodeKey(strings.NewReader(setForSelector), jwk.WithSelector(func(k jwk.Key) bool {
+			if len(order) == 0 {
+				t.Fatalf("unexpected key %v", k)
+			}
+			if !(order[0].Kid() == k.Kid() && order[0].Kty() == k.Kty()) {
+				t.Fatalf("expected { kid:%v, kty:%v }, but got key { kid:%v, kty:%v }", order[0].Kid(), order[0].Kty(), k.Kid(), k.Kty())
+			}
+			if len(order) == 1 {
+				return true
+			}
+			order = order[1:]
+			return false
+		}))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+	})
+	t.Run("from invalid set", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(rsaPriInvalid), jwk.WithSelector(func(k jwk.Key) bool {
+			return false
+		}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+	})
+	t.Run("from set, but never select", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(setForSelector), jwk.WithSelector(func(k jwk.Key) bool {
+			return false
+		}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrNoSelectedKey) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrNoSelectedKey)
+		}
+	})
+}
+func TestDecodeKty(t *testing.T) {
+	t.Run("not exist", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyKtyNotExist))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrNotExist) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrNotExist)
+		}
+	})
+	t.Run("not string", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyKtyNotString))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidString) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidString)
+		}
+	})
+}
 func TestDecodeUse(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		k, err := jwk.DecodeKey(strings.NewReader(basekeyUseValid))
@@ -155,14 +359,327 @@ func TestDecodeUse(t *testing.T) {
 		}
 	})
 }
+
+func TestDecodeKeyOps(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		k, err := jwk.DecodeKey(strings.NewReader(basekeyKeyOpsValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		if !k.KeyOps().In(jwk.KeyOpSign) {
+			t.Fatalf("expected in %v, but not", jwk.KeyOpSign)
+		}
+	})
+	t.Run("untype", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyKeyOpsUntype))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidArrayString) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidArrayString)
+		}
+	})
+	t.Run("unknown", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyKeyOpsUnknown), jwk.WithOptionDecodeKey(func(value *jwk.OptionDecodeKey) {
+			value.DisallowUnknownOp = true
+		}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrDisallowUnknownOp) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrDisallowUnknownOp)
+		}
+	})
+	t.Run("duplicated", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyKeyOpsDuplicated), jwk.WithOptionDecodeKey(func(value *jwk.OptionDecodeKey) {
+			value.DisallowDuplicatedOps = true
+		}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrDisallowDuplicatedOps) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrDisallowDuplicatedOps)
+		}
+	})
+	t.Run("combination", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyKeyOpsCombination), jwk.WithOptionDecodeKey(func(value *jwk.OptionDecodeKey) {}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidCombination) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidCombination)
+		}
+	})
+}
+
+func TestDecodeBothUseKeyOps(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyBothUseKeyopsValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+	})
+	t.Run("disallow", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyBothUseKeyopsValid), jwk.WithOptionDecodeKey(func(value *jwk.OptionDecodeKey) {
+			value.DisallowBothUseAndOps = true
+		}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrDisallowBothUseKeyops) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrDisallowBothUseKeyops)
+		}
+	})
+	t.Run("invalid", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyBothUseKeyopsInvalid))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrNotCompatible) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrNotCompatible)
+		}
+	})
+}
+
+func TestDecodeAlg(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		k, err := jwk.DecodeKey(strings.NewReader(basekeyAlgValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		if k.Alg() != jwk.AlgorithmHS256 {
+			t.Fatalf("expected %v, but got %v", jwk.AlgorithmHS256, k.Alg())
+		}
+	})
+	t.Run("untype", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyAlgUntype))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidString) {
+			t.Fatalf("expected %v is %v, but got", err, jwk.ErrInvalidString)
+		}
+	})
+	t.Run("unknown", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyAlgUnknown), jwk.WithOptionDecodeKey(func(value *jwk.OptionDecodeKey) {
+			value.DisallowUnknownAlgorithm = true
+		}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrDisallowUnknownAlgorithm) {
+			t.Fatalf("expected %v is %v, but got", err, jwk.ErrInvalidString)
+		}
+	})
+}
+
+func TestDecodeKid(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		k, err := jwk.DecodeKey(strings.NewReader(basekeyKidValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		if k.Kid() != "id" {
+			t.Fatalf("expected 'id', but got %v", k.Kid())
+		}
+	})
+	t.Run("untype", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyKidUntype))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidString) {
+			t.Fatalf("expected %v is %v, but got", err, jwk.ErrInvalidString)
+		}
+	})
+}
+
+func TestDecodeX5u(t *testing.T) {
+	// TODO : Check validate
+	t.Run("type", func(t *testing.T) {
+		k, err := jwk.DecodeKey(strings.NewReader(basekeyX5uType))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		if k.X5u().String() != "https://github.com/iamGreedy" {
+			t.Fatalf("expected '%v', but got '%v'", "https://github.com/iamGreedy", k.X5u().String())
+		}
+	})
+	t.Run("unurl", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5uUnurl))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidURL) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidURL)
+		}
+	})
+	t.Run("untype", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5uUntype))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidString) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidURL)
+		}
+	})
+}
+
+func TestDecodeX5c(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5cValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+	})
+	t.Run("x509", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5cX509))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidX509) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidX509)
+		}
+	})
+	t.Run("untype", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5cUntype))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidArrayString) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidX509)
+		}
+	})
+	t.Run("base64", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5cB64))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidBase64) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidX509)
+		}
+	})
+}
+
+func TestDecodeX5t(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		// TODO : Check validate
+	})
+	t.Run("not string", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tNotString))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidString) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidString)
+		}
+	})
+	t.Run("not b64", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tNotB64))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidBase64) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidBase64)
+		}
+	})
+	t.Run("invalid size", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tInvalidSize))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrSHA1Size) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrSHA1Size)
+		}
+	})
+}
+
+func TestDecodeX5tS256(t *testing.T) {
+	t.Run("valid", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tS256Valid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		// TODO : Check validate
+	})
+	t.Run("not string", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tS256NotString))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidString) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidString)
+		}
+	})
+	t.Run("not b64", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tS256NotB64))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidBase64) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidBase64)
+		}
+	})
+	t.Run("invalid size", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tS256InvalidSize))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrSHA256Size) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrSHA256Size)
+		}
+	})
+}
+
+func TestDecodeX5tSHA256(t *testing.T) {
+
+	t.Run("valid", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tValid))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		// TODO : Check validate
+	})
+	t.Run("not string", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tNotString))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidString) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidString)
+		}
+	})
+	t.Run("not b64", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tNotB64))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrInvalidBase64) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidBase64)
+		}
+	})
+	t.Run("invalid size", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(basekeyX5tInvalidSize))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrSHA1Size) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInvalidBase64)
+		}
+	})
+}
 func TestDecodeUnknown(t *testing.T) {
 	t.Run("unknown kty", func(t *testing.T) {
 		k, err := jwk.DecodeKey(strings.NewReader(unknownUnknownKty))
 		if err != nil {
 			t.Fatalf("expected <nil>, but got %v", err)
 		}
-		if _, ok := k.(*jwk.UnknownKey); !ok {
-			t.Fatalf("expected %T, but got %T", new(jwk.UnknownKey), k)
+		if k.Kty() != "unknown" {
+			t.Fatalf("expected %v, but got %v", "unknown", k.Kty())
 		}
 	})
 }
@@ -256,8 +773,8 @@ func TestDecodeECPri(t *testing.T) {
 			t.Fatalf("expected is jwk.ErrCauseUnknown")
 		}
 	})
-	t.Run("invalid d", func(t *testing.T) {
-		_, err := jwk.DecodeKey(strings.NewReader(ecPriInvalidD))
+	t.Run("not string d", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(ecPriNotStringD))
 		if err == nil {
 			t.Fatalf("expected not <nil>, but got <nil>")
 		}
@@ -269,6 +786,34 @@ func TestDecodeECPri(t *testing.T) {
 		}
 		if !errors.Is(err, jwk.ErrInvalidBase64) {
 			t.Fatalf("expected is jwk.ErrCauseUnknown")
+		}
+	})
+
+	t.Run("invalid length x", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(ecPriInvalidLengthX))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrECInvalidBytesLength) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrECInvalidBytesLength)
+		}
+	})
+	t.Run("invalid length y", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(ecPriInvalidLengthY))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrECInvalidBytesLength) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrECInvalidBytesLength)
+		}
+	})
+	t.Run("invalid length d", func(t *testing.T) {
+		_, err := jwk.DecodeKey(strings.NewReader(ecPriInvalidLengthD))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrECInvalidBytesLength) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrECInvalidBytesLength)
 		}
 	})
 }
@@ -403,6 +948,55 @@ func TestDecodeRSAPri(t *testing.T) {
 		_, err := jwk.DecodeKey(strings.NewReader(rsaPriInvalid))
 		if err == nil {
 			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+	})
+}
+
+func TestDecodeSet(t *testing.T) {
+	t.Run("invalid json", func(t *testing.T) {
+		_, err := jwk.DecodeSet(strings.NewReader(setInvalidJSON))
+		if !errors.Is(err, jwk.ErrInvalidJSON) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrAlreadyDone)
+		}
+	})
+	t.Run("with invalid key", func(t *testing.T) {
+		_, err := jwk.DecodeSet(strings.NewReader(setWithInvalidKey))
+		if !errors.Is(err, jwk.ErrInnerKey) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrInnerKey)
+		}
+	})
+	t.Run("done context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err := jwk.DecodeSetBy(ctx, strings.NewReader(setUnknownField))
+		if !errors.Is(err, jwk.ErrAlreadyDone) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrAlreadyDone)
+		}
+	})
+	t.Run("allow unknown field", func(t *testing.T) {
+		s, err := jwk.DecodeSet(strings.NewReader(setUnknownField), jwk.WithOptionDecodeSet(func(value *jwk.OptionDecodeSet) {
+			value.DisallowUnknownField = false
+		}))
+		if err != nil {
+			t.Fatalf("expected <nil>, but got %v", err)
+		}
+		if v, ok := s.Extra["unknown"]; ok {
+			if v != "unknown" {
+				t.Fatalf("expected Extra['unknown'] is %v, but got %v", "unknown", v)
+			}
+		} else {
+			t.Fatalf("expected 'unknown' in Extra, but not")
+		}
+	})
+	t.Run("disallow unknown field", func(t *testing.T) {
+		_, err := jwk.DecodeSet(strings.NewReader(setUnknownField), jwk.WithOptionDecodeSet(func(value *jwk.OptionDecodeSet) {
+			value.DisallowUnknownField = true
+		}))
+		if err == nil {
+			t.Fatalf("expected not <nil>, but got <nil>")
+		}
+		if !errors.Is(err, jwk.ErrDisallowUnkwownField) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrDisallowUnkwownField)
 		}
 	})
 }
