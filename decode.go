@@ -75,6 +75,10 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 		tmp := new(UnknownKey)
 		result = tmp
 		bkey = &tmp.BaseKey
+		bkey.extra = make(map[string]interface{})
+		if err := decodeBaseKey(bkey, option, data); err != nil {
+			return nil, err
+		}
 		if err := decodeUnknownKey(tmp, option, data); err != nil {
 			return nil, err
 		}
@@ -82,6 +86,10 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 		tmp := new(SymetricKey)
 		result = tmp
 		bkey = &tmp.BaseKey
+		bkey.extra = make(map[string]interface{})
+		if err := decodeBaseKey(bkey, option, data); err != nil {
+			return nil, err
+		}
 		if err := decodeSymetricKey(&tmp.Key, option, data); err != nil {
 			return nil, err
 		}
@@ -90,6 +98,10 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 			tmp := new(ECPrivateKey)
 			result = tmp
 			bkey = &tmp.BaseKey
+			bkey.extra = make(map[string]interface{})
+			if err := decodeBaseKey(bkey, option, data); err != nil {
+				return nil, err
+			}
 			tmp.Key = new(ecdsa.PrivateKey)
 			if err := decodeECPriKey(tmp.Key, option, data); err != nil {
 				return nil, err
@@ -98,6 +110,10 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 			tmp := new(ECPublicKey)
 			result = tmp
 			bkey = &tmp.BaseKey
+			bkey.extra = make(map[string]interface{})
+			if err := decodeBaseKey(bkey, option, data); err != nil {
+				return nil, err
+			}
 			tmp.Key = new(ecdsa.PublicKey)
 			if err := decodeECPubKey(tmp.Key, option, data); err != nil {
 				return nil, err
@@ -108,6 +124,10 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 			tmp := new(RSAPrivateKey)
 			result = tmp
 			bkey = &tmp.BaseKey
+			bkey.extra = make(map[string]interface{})
+			if err := decodeBaseKey(bkey, option, data); err != nil {
+				return nil, err
+			}
 			tmp.Key = new(rsa.PrivateKey)
 			if err := decodeRSAPriKey(tmp.Key, option, data); err != nil {
 				return nil, err
@@ -116,6 +136,10 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 			tmp := new(RSAPublicKey)
 			result = tmp
 			bkey = &tmp.BaseKey
+			bkey.extra = make(map[string]interface{})
+			if err := decodeBaseKey(bkey, option, data); err != nil {
+				return nil, err
+			}
 			tmp.Key = new(rsa.PublicKey)
 			if err := decodeRSAPubKey(tmp.Key, option, data); err != nil {
 				return nil, err
@@ -125,13 +149,13 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 		tmp := new(UnknownKey)
 		result = tmp
 		bkey = &tmp.BaseKey
+		bkey.extra = make(map[string]interface{})
+		if err := decodeBaseKey(bkey, option, data); err != nil {
+			return nil, err
+		}
 		if err := decodeUnknownKey(tmp, option, data); err != nil {
 			return nil, err
 		}
-	}
-	// use, key_ops, alg, kid, x5u, x5c, x5t, x5t#S256
-	if err := decodeBaseKey(bkey, option, data); err != nil {
-		return nil, err
 	}
 	//
 	if !option.AllowUnknownField {
@@ -141,7 +165,7 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 				errs = append(errs, FieldError(k))
 			}
 
-			return nil, mkErrors(append([]error{ErrRequirement, ErrCauseOption}, errs...)...)
+			return nil, mkErrors(append([]error{ErrRequirement, ErrDisallowUnkwownField}, errs...)...)
 		}
 	}
 	return result, nil
@@ -154,7 +178,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		bkey.KeyUse = KeyUse(suse)
 		if option.DisallowUnknownUse {
 			if !bkey.KeyUse.IsKnown() {
-				return mkErrors(ErrRequirement, ErrCauseOption, FieldError("use"), fmt.Errorf("not well-known value '%s' for use", suse))
+				return mkErrors(ErrRequirement, FieldError("use"), ErrUnknownKeyUse, fmt.Errorf("%v", suse))
 			}
 		}
 	} else {
@@ -169,18 +193,18 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		for i, sop := range sops {
 			op := KeyOp(sop)
 			if option.DisallowUnknownOp && !op.IsKnown() {
-				return mkErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), fmt.Errorf("not well-known value '%s' for op", sop))
+				return mkErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), ErrDisallowUnknownOp, errors.New(sop))
 			}
 			if option.DisallowDuplicatedOps {
 				if _, ok := m[op]; ok {
-					return mkErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), fmt.Errorf("duplicated op '%s'", sop))
+					return mkErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), ErrDisallowDuplicatedOps, errors.New(sop))
 				}
 			}
 			m[op] = struct{}{}
 		}
 		bkey.KeyOperations = KeyOps(m)
 		if !bkey.KeyOperations.IsValidCombination() {
-			return mkErrors(ErrRequirement, FieldError("key_ops"), fmt.Errorf("invalid combination %v", bkey.KeyOperations.AsSlice()))
+			return mkErrors(ErrRequirement, FieldError("key_ops"), ErrKeyOpsInvalidCombination)
 		}
 	} else {
 		if !errors.Is(ErrNotExist, opserr) {
@@ -232,7 +256,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		for i, x5cert := range ax5c {
 			bx5cert, err := base64.RawStdEncoding.DecodeString(x5cert)
 			if err != nil {
-				return mkErrors(ErrRequirement, FieldError("x5c"), IndexError(i), ErrInvalidBase64Std, err)
+				return mkErrors(ErrRequirement, FieldError("x5c"), IndexError(i), ErrInvalidBase64, err)
 			}
 			cert, err := x509.ParseCertificate(bx5cert)
 			if err != nil {
@@ -332,6 +356,9 @@ func decodeRSAPriKey(key *rsa.PrivateKey, option *OptionDecodeKey, data map[stri
 		return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("q"), err)
 	}
 	if option.IgnorePrecomputed {
+		delete(data, "dp")
+		delete(data, "dq")
+		delete(data, "qi")
 		key.Precompute()
 	} else {
 		if bdp, err := utilConsumeB64url(data, "dp"); err == nil {
@@ -368,7 +395,7 @@ func decodeRSAPriKey(key *rsa.PrivateKey, option *OptionDecodeKey, data map[stri
 	// }
 	if !option.IgnoreValidate {
 		if err := key.Validate(); err != nil {
-			return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, err)
+			return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, ErrCauseRSAValidate, err)
 		}
 	}
 	return nil
@@ -376,6 +403,7 @@ func decodeRSAPriKey(key *rsa.PrivateKey, option *OptionDecodeKey, data map[stri
 
 // https://www.rfc-editor.org/rfc/rfc7518.html#section-6.2
 func decodeECPubKey(key *ecdsa.PublicKey, option *OptionDecodeKey, data map[string]interface{}) error {
+
 	if curve, err := utilConsumeStr(data, "crv"); err == nil {
 		switch curve {
 		case "P-256":
@@ -385,17 +413,24 @@ func decodeECPubKey(key *ecdsa.PublicKey, option *OptionDecodeKey, data map[stri
 		case "P-521":
 			key.Curve = elliptic.P521()
 		default:
-			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("crv"), fmt.Errorf("unknown curve '%s'", curve))
+			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("crv"), ErrCauseUnknown, fmt.Errorf("unknown curve '%s'", curve))
 		}
 	} else {
 		return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("crv"), err)
 	}
+	expectedLength := (key.Curve.Params().BitSize + 7) / 8
 	if x, err := utilConsumeB64url(data, "x"); err == nil {
+		if len(x) != expectedLength {
+			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("x"), ErrInvalidByteLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(x)))
+		}
 		key.X = new(big.Int).SetBytes(x)
 	} else {
 		return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("x"), err)
 	}
 	if y, err := utilConsumeB64url(data, "y"); err == nil {
+		if len(y) != expectedLength {
+			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), ErrInvalidByteLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(y)))
+		}
 		key.Y = new(big.Int).SetBytes(y)
 	} else {
 		return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), err)
@@ -405,14 +440,19 @@ func decodeECPubKey(key *ecdsa.PublicKey, option *OptionDecodeKey, data map[stri
 
 // https://www.rfc-editor.org/rfc/rfc7518.html#section-6.2
 func decodeECPriKey(key *ecdsa.PrivateKey, option *OptionDecodeKey, data map[string]interface{}) error {
-	if err := decodeECPubKey(&key.PublicKey, option, data); err != nil {
+	err := decodeECPubKey(&key.PublicKey, option, data)
+	if err != nil {
 		replaceErrors(err, ErrCauseECPublicKey, ErrCauseECPrivateKey)
 		return err
 	}
+	expectedLength := (key.Curve.Params().BitSize + 7) / 8
 	if d, err := utilConsumeB64url(data, "d"); err == nil {
+		if len(d) != expectedLength {
+			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), ErrInvalidByteLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(d)))
+		}
 		key.D = new(big.Int).SetBytes(d)
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("d"), err)
+		return mkErrors(ErrRequirement, ErrCauseECPrivateKey, FieldError("d"), err)
 	}
 	return nil
 }

@@ -110,14 +110,27 @@ func encodePubRSA(data map[string]interface{}, pubk *rsa.PublicKey) {
 }
 
 func encodePriEC(data map[string]interface{}, prik *ecdsa.PrivateKey) {
-	data["d"] = base64.URLEncoding.EncodeToString(prik.D.Bytes())
+	data["d"] = safeECByte(prik.Params().BitSize, prik.D.Bytes())
 	encodePubEC(data, &prik.PublicKey)
 }
 
 func encodePubEC(data map[string]interface{}, pubk *ecdsa.PublicKey) {
 	data["crv"] = pubk.Curve.Params().Name
-	data["x"] = base64.URLEncoding.EncodeToString(pubk.X.Bytes())
-	data["y"] = base64.URLEncoding.EncodeToString(pubk.Y.Bytes())
+	data["x"] = safeECByte(pubk.Params().BitSize, pubk.X.Bytes())
+	data["y"] = safeECByte(pubk.Params().BitSize, pubk.Y.Bytes())
+}
+func safeECByte(bitsize int, bts []byte) string {
+	expectedLength := (bitsize + 7) / 8
+	if expectedLength != len(bts) {
+		buf := make([]byte, expectedLength)
+		startAt := expectedLength - len(bts)
+		if startAt < 0 {
+			startAt = 0
+		}
+		copy(buf[startAt:], bts)
+		bts = buf
+	}
+	return base64.RawURLEncoding.EncodeToString(bts)
 }
 
 func encodeSym(data map[string]interface{}, key []byte) {
