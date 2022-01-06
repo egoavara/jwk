@@ -8,8 +8,9 @@ import (
 
 func TestFetch(t *testing.T) {
 	target := "https://www.googleapis.com/oauth2/v3/certs"
-	_, err := jwk.FetchSet(target)
+	s, err := jwk.FetchSet(target)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Log(s)
 }

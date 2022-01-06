@@ -32,7 +32,7 @@ func DecodeKeyBy(ctx context.Context, reader io.Reader) (Key, error) {
 	default:
 	}
 	var option *OptionDecodeKey
-	getContextValue(ctx, &option, false)
+	MustGetOptionFromContext(ctx, &option, false)
 	//
 	if option.Selector != nil {
 		set, err := DecodeSetBy(ctx, reader)
@@ -158,7 +158,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 			}
 		}
 	} else {
-		if !errors.Is(ErrNotExist, useerr) {
+		if !errors.Is(useerr, ErrNotExist) {
 			return mkErrors(ErrInvalidJSON, FieldError("use"), useerr)
 		}
 	}
@@ -202,7 +202,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 			return mkErrors(ErrRequirement, ErrCauseOption, FieldError("alg"), fmt.Errorf("unknown algorithm %s", bkey.Algorithm))
 		}
 	} else {
-		if !errors.Is(ErrNotExist, algerr) {
+		if !errors.Is(algerr, ErrNotExist) {
 			return mkErrors(ErrRequirement, FieldError("alg"), algerr)
 		}
 	}
@@ -211,7 +211,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 	if kiderr == nil {
 		bkey.KeyID = skid
 	} else {
-		if !errors.Is(ErrNotExist, kiderr) {
+		if !errors.Is(kiderr, ErrNotExist) {
 			return mkErrors(ErrRequirement, FieldError("kid"), kiderr)
 		}
 	}
@@ -221,7 +221,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		bkey.X509URL = sx5u
 		// TODO : Validate x5u
 	} else {
-		if !errors.Is(ErrNotExist, x5uerr) {
+		if !errors.Is(x5uerr, ErrNotExist) {
 			return mkErrors(ErrRequirement, FieldError("x5u"), x5uerr)
 		}
 	}
@@ -242,27 +242,27 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		}
 		// TODO : Validate x5c
 	} else {
-		if !errors.Is(ErrNotExist, x5cerr) {
+		if !errors.Is(x5cerr, ErrNotExist) {
 			return mkErrors(ErrRequirement, FieldError("x5c"), x5cerr)
 		}
 	}
 	// x5t
 	bx5t, x5terr := utilConsumeB64url(data, "x5t")
-	if x5uerr == nil {
+	if x5terr == nil {
 		bkey.X509CertThumbprint = bx5t
 		// TODO : Validate x5t
 	} else {
-		if !errors.Is(ErrNotExist, x5terr) {
+		if !errors.Is(x5terr, ErrNotExist) {
 			return mkErrors(ErrRequirement, FieldError("x5t"), x5terr)
 		}
 	}
 	// x5t#S256
 	bx5ts, x5tserr := utilConsumeB64url(data, "x5t#S256")
-	if x5uerr == nil {
+	if x5tserr == nil {
 		bkey.X509CertThumbprintS256 = bx5ts
 		// TODO : Validate x5t#S256
 	} else {
-		if !errors.Is(ErrNotExist, x5tserr) {
+		if !errors.Is(x5tserr, ErrNotExist) {
 			return mkErrors(ErrRequirement, FieldError("x5t#S256"), x5tserr)
 		}
 	}
@@ -433,9 +433,9 @@ func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
 	}
 	//
 	var option *OptionDecodeSet
-	getContextValue(ctx, &option, false)
+	MustGetOptionFromContext(ctx, &option, false)
 	var optionk *OptionDecodeKey
-	getContextValue(ctx, &optionk, false)
+	MustGetOptionFromContext(ctx, &optionk, false)
 	var data map[string]interface{}
 	if err := json.NewDecoder(reader).Decode(&data); err != nil {
 		return nil, mkErrors(ErrInvalidJSON, err)

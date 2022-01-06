@@ -34,8 +34,8 @@ var (
 
 type (
 	wrapError struct {
-		parent  error
 		current error
+		child   error
 	}
 	fieldError struct {
 		field string
@@ -49,11 +49,9 @@ func mkErrors(err ...error) error {
 	if len(err) == 0 {
 		return nil
 	}
-	left := err[:len(err)-1]
-	current := err[len(err)-1]
 	return &wrapError{
-		parent:  mkErrors(left...),
-		current: current,
+		current: err[0],
+		child:   mkErrors(err[1:]...),
 	}
 }
 func replaceErrors(err error, from error, to error) {
@@ -86,24 +84,17 @@ func (fe *fieldError) Error() string {
 }
 
 func (we *wrapError) Error() string {
-	if we.parent != nil {
-		return ""
+	if we.child == nil {
+		return fmt.Sprintf("%v", we.current)
 	}
-	cerr := we.current.Error()
-	if len(cerr) == 0 {
-		return fmt.Sprintf("%v", we.parent)
-	}
-	return fmt.Sprintf("%v, %s", we.parent, cerr)
+	return fmt.Sprintf("%v, %v", we.current, we.child)
 }
 func (we *wrapError) Unwrap() error {
-	return we.parent
+	return we.child
 }
 func (we *wrapError) As(i interface{}) bool {
 	if errors.As(we.current, i) {
 		return true
-	}
-	if we.parent != nil {
-		return errors.As(we.parent, i)
 	}
 	return false
 }
@@ -111,9 +102,19 @@ func (we *wrapError) Is(other error) bool {
 	if errors.Is(we.current, other) {
 		return true
 	}
-	if we.parent != nil {
-		return errors.Is(we.parent, other)
-	}
+	return false
+}
 
+func (fe *fieldError) Is(other error) bool {
+	if ofe, ok := other.(*fieldError); ok {
+		return fe.field == ofe.field
+	}
+	return false
+}
+
+func (ie *indexError) Is(other error) bool {
+	if oie, ok := other.(*indexError); ok {
+		return ie.index == oie.index
+	}
 	return false
 }

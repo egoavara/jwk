@@ -11,30 +11,10 @@ import (
 func TestSortkey(t *testing.T) {
 	t.Run("name is different", func(t *testing.T) {
 		data := []jwk.Key{
-			&jwk.UnknownKey{
-				BaseKey: jwk.BaseKey{
-					KeyID: "D",
-				},
-				KeyType: jwk.KeyTypeOctet,
-			},
-			&jwk.UnknownKey{
-				BaseKey: jwk.BaseKey{
-					KeyID: "A",
-				},
-				KeyType: jwk.KeyTypeOctet,
-			},
-			&jwk.UnknownKey{
-				BaseKey: jwk.BaseKey{
-					KeyID: "B",
-				},
-				KeyType: jwk.KeyTypeOctet,
-			},
-			&jwk.UnknownKey{
-				BaseKey: jwk.BaseKey{
-					KeyID: "C",
-				},
-				KeyType: jwk.KeyTypeOctet,
-			},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "D"}, KeyType: jwk.KeyTypeOctet},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "A"}, KeyType: jwk.KeyTypeOctet},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "B"}, KeyType: jwk.KeyTypeOctet},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "C"}, KeyType: jwk.KeyTypeOctet},
 		}
 		ids := make([]string, len(data))
 		for i, k := range data {
@@ -50,24 +30,9 @@ func TestSortkey(t *testing.T) {
 	})
 	t.Run("name is same, but different type", func(t *testing.T) {
 		data := []jwk.Key{
-			&jwk.UnknownKey{
-				BaseKey: jwk.BaseKey{
-					KeyID: "A",
-				},
-				KeyType: jwk.KeyTypeOctet,
-			},
-			&jwk.UnknownKey{
-				BaseKey: jwk.BaseKey{
-					KeyID: "A",
-				},
-				KeyType: jwk.KeyTypeRSA,
-			},
-			&jwk.UnknownKey{
-				BaseKey: jwk.BaseKey{
-					KeyID: "A",
-				},
-				KeyType: jwk.KeyTypeEC,
-			},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "A"}, KeyType: jwk.KeyTypeOctet},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "A"}, KeyType: jwk.KeyTypeRSA},
+			&jwk.UnknownKey{BaseKey: jwk.BaseKey{KeyID: "A"}, KeyType: jwk.KeyTypeEC},
 		}
 		jwk.SortKey(data)
 		if data[0].Kty() != jwk.KeyTypeEC {
@@ -112,15 +77,15 @@ func TestSortkey(t *testing.T) {
 			}
 		}
 	})
-	t.Run("random generated 1M, mixed test", func(t *testing.T) {
-		const GENERATED_LENGTH = 1_000_000
-		const ID_MINLEN = 3
+	t.Run("random generated 1.5M, mixed test", func(t *testing.T) {
+		const GENERATED_LENGTH = 1_500_000
+		const ID_MINLEN = 2
 		const ID_MAXLEN = 4
 		var TYPE_ONEOF = []jwk.KeyType{jwk.KeyTypeOctet, jwk.KeyTypeEC, jwk.KeyTypeRSA}
 		var KTY_TO_INT_TABLE = map[jwk.KeyType]int{
-			jwk.KeyTypeEC:    0,
-			jwk.KeyTypeRSA:   1,
-			jwk.KeyTypeOctet: 2,
+			jwk.KeyTypeEC:    -3,
+			jwk.KeyTypeRSA:   -2,
+			jwk.KeyTypeOctet: -1,
 		}
 		var CHARSET = []rune("abcdefghijklmnopqrstuvwxyz")
 		gen_id := func(length int) string {

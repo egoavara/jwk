@@ -2,9 +2,9 @@ package jwk
 
 import (
 	"context"
-	"crypto/tls"
 	"net/http"
 	"reflect"
+	"time"
 )
 
 // optionals
@@ -72,17 +72,26 @@ type (
 
 // withs
 type (
-	setupDecodeKey struct{ deck func(*OptionDecodeKey) }
-	withContext    struct{ context context.Context }
-	withHTTPClient struct{ clt *http.Client }
-	withSelector   struct{ selector func(Key) bool }
-	withHandleID   struct{ handleID func(*string) *string }
+	withOptionEncodeSet struct{ handle func(*OptionEncodeSet) }
+	withOptionEncodeKey struct{ handle func(*OptionEncodeKey) }
+	withOptionDecodeSet struct{ handle func(*OptionDecodeSet) }
+	withOptionDecodeKey struct{ handle func(*OptionDecodeKey) }
+	withOptionFetch     struct{ handle func(*OptionFetch) }
+	withContext         struct{ context context.Context }
+	withHTTPClient      struct{ clt *http.Client }
+	withSelector        struct{ selector func(Key) bool }
+	withHandleID        struct{ handleID func(*string) *string }
 )
 
 // utility function for context
-func getContextValue(ctx context.Context, ctxtype interface{}, orInsert bool) context.Context {
-	reflectCTXType := reflect.TypeOf(ctxtype)
-	switch ctxv := ctxtype.(type) {
+// ppoption must be one of (**OptionEncodeSet|**OptionEncodeKey|**OptionDecodeSet|**OptionDecodeKey|**OptionFetch)
+// If there is no Option* in context, it return default option, not <nil>
+// remind, ppoption must be pointer of pointer for example
+//		var opt *OptionFetch
+//		MustGetOptionFromContext(ctx, &opt, false)
+func MustGetOptionFromContext(ctx context.Context, ppoption interface{}, orInsert bool) context.Context {
+	reflectCTXType := reflect.TypeOf(ppoption)
+	switch ctxv := ppoption.(type) {
 	case **OptionEncodeSet:
 		if v := ctx.Value(reflectCTXType); v != nil {
 			*ctxv = v.(*OptionEncodeSet)
@@ -125,24 +134,14 @@ func getContextValue(ctx context.Context, ctxtype interface{}, orInsert bool) co
 			return ctx
 		}
 		*ctxv = &OptionFetch{
-			Client: &http.Client{
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{
-						// InsecureSkipVerify:          true,
-					},
-				},
-			},
+			Client: http.DefaultClient,
 		}
 		if orInsert {
 			ctx = context.WithValue(ctx, reflectCTXType, *ctxv)
 		}
-	default:
-		panic("unreachable")
 	}
 	return ctx
 }
-
-//
 
 // for any
 func WithContext(overide context.Context) *withContext {
@@ -179,13 +178,13 @@ func WithHTTPClient(hclt *http.Client) *withHTTPClient {
 }
 func (w *withHTTPClient) WithFetchSet(ctx context.Context) context.Context {
 	var ifset *OptionFetch
-	ctx = getContextValue(ctx, &ifset, true)
+	ctx = MustGetOptionFromContext(ctx, &ifset, true)
 	ifset.Client = w.clt
 	return ctx
 }
 func (w *withHTTPClient) WithFetchKey(ctx context.Context) context.Context {
 	var ifkey *OptionFetch
-	ctx = getContextValue(ctx, &ifkey, true)
+	ctx = MustGetOptionFromContext(ctx, &ifkey, true)
 	ifkey.Client = w.clt
 	return ctx
 }
@@ -201,52 +200,17 @@ func WithSelector(selector func(Key) bool) *withSelector {
 
 func (w *withSelector) WithFetchKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
+	ctx = MustGetOptionFromContext(ctx, &ifkey, true)
 	ifkey.Selector = w.selector
 	return ctx
 }
 
 func (w *withSelector) WithDecodeKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
+	ctx = MustGetOptionFromContext(ctx, &ifkey, true)
 	ifkey.Selector = w.selector
 	return ctx
 }
-
-// // for
-// //     `OptionalFetchSet`
-// //     `OptionalFetchKey`
-// //     `OptionalDecodeSet`
-// //     `OptionalDecodeKey`
-// func WithLevel(allowUnknown bool) *withAllowUnknown {
-// 	return &withAllowUnknown{
-// 		allowUnknown: allowUnknown,
-// 	}
-// }
-// func (w *withAllowUnknown) WithFetchSet(ctx context.Context) context.Context {
-// 	var ifkey *OptionDecodeKey
-// 	ctx = getContextValue(ctx, &ifkey, true)
-// 	ifkey.AllowUnknown = w.allowUnknown
-// 	return ctx
-// }
-// func (w *withAllowUnknown) WithDecodeSet(ctx context.Context) context.Context {
-// 	var ifkey *OptionDecodeKey
-// 	ctx = getContextValue(ctx, &ifkey, true)
-// 	ifkey.AllowUnknown = w.allowUnknown
-// 	return ctx
-// }
-// func (w *withAllowUnknown) WithFetchKey(ctx context.Context) context.Context {
-// 	var ifkey *OptionDecodeKey
-// 	ctx = getContextValue(ctx, &ifkey, true)
-// 	ifkey.AllowUnknown = w.allowUnknown
-// 	return ctx
-// }
-// func (w *withAllowUnknown) WithDecodeKey(ctx context.Context) context.Context {
-// 	var ifkey *OptionDecodeKey
-// 	ctx = getContextValue(ctx, &ifkey, true)
-// 	ifkey.AllowUnknown = w.allowUnknown
-// 	return ctx
-// }
 
 // for
 //     `OptionalFetchSet`
@@ -261,56 +225,250 @@ func WithHandleID(handleID func(s *string) *string) *withHandleID {
 
 func (w *withHandleID) WithFetchSet(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
+	ctx = MustGetOptionFromContext(ctx, &ifkey, true)
 	ifkey.HandleID = w.handleID
 	return ctx
 }
+
 func (w *withHandleID) WithDecodeSet(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
+	ctx = MustGetOptionFromContext(ctx, &ifkey, true)
 	ifkey.HandleID = w.handleID
 	return ctx
 }
+
 func (w *withHandleID) WithFetchKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
+	ctx = MustGetOptionFromContext(ctx, &ifkey, true)
 	ifkey.HandleID = w.handleID
 	return ctx
 }
+
 func (w *withHandleID) WithDecodeKey(ctx context.Context) context.Context {
 	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
+	ctx = MustGetOptionFromContext(ctx, &ifkey, true)
 	ifkey.HandleID = w.handleID
 	return ctx
 }
 
-func SetupDecodeKey(fn func(*OptionDecodeKey)) *setupDecodeKey {
-	return &setupDecodeKey{
-		deck: fn,
-	}
+func WithOptionEncodeSet(handle func(value *OptionEncodeSet)) *withOptionEncodeSet {
+	return &withOptionEncodeSet{handle: handle}
 }
 
-func (w *setupDecodeKey) WithFetchSet(ctx context.Context) context.Context {
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
-	w.deck(ifkey)
+func (w *withOptionEncodeSet) WithEncodeSet(ctx context.Context) context.Context {
+	var option *OptionEncodeSet
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
 	return ctx
 }
-func (w *setupDecodeKey) WithDecodeSet(ctx context.Context) context.Context {
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
-	w.deck(ifkey)
+
+func WithOptionEncodeKey(handle func(value *OptionEncodeKey)) *withOptionEncodeKey {
+	return &withOptionEncodeKey{handle: handle}
+}
+
+func (w *withOptionEncodeKey) WithEncodeSet(ctx context.Context) context.Context {
+	var option *OptionEncodeKey
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
 	return ctx
 }
-func (w *setupDecodeKey) WithFetchKey(ctx context.Context) context.Context {
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
-	w.deck(ifkey)
+
+func (w *withOptionEncodeKey) WithEncodeKey(ctx context.Context) context.Context {
+	var option *OptionEncodeKey
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
 	return ctx
 }
-func (w *setupDecodeKey) WithDecodeKey(ctx context.Context) context.Context {
-	var ifkey *OptionDecodeKey
-	ctx = getContextValue(ctx, &ifkey, true)
-	w.deck(ifkey)
+
+func WithOptionDecodeSet(handle func(value *OptionDecodeSet)) *withOptionDecodeSet {
+	return &withOptionDecodeSet{handle: handle}
+}
+
+func (w *withOptionDecodeSet) WithFetchSet(ctx context.Context) context.Context {
+	var option *OptionDecodeSet
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
 	return ctx
+}
+
+func (w *withOptionDecodeSet) WithDecodeSet(ctx context.Context) context.Context {
+	var option *OptionDecodeSet
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
+	return ctx
+}
+
+func WithOptionDecodeKey(handle func(value *OptionDecodeKey)) *withOptionDecodeKey {
+	return &withOptionDecodeKey{handle: handle}
+}
+
+func (w *withOptionDecodeKey) WithFetchSet(ctx context.Context) context.Context {
+	var option *OptionDecodeKey
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
+	return ctx
+}
+
+func (w *withOptionDecodeKey) WithFetchKey(ctx context.Context) context.Context {
+	var option *OptionDecodeKey
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
+	return ctx
+}
+
+func (w *withOptionDecodeKey) WithDecodeSet(ctx context.Context) context.Context {
+	var option *OptionDecodeKey
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
+	return ctx
+}
+
+func (w *withOptionDecodeKey) WithDecodeKey(ctx context.Context) context.Context {
+	var option *OptionDecodeKey
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
+	return ctx
+}
+
+func WithOptionFetch(handle func(value *OptionFetch)) *withOptionFetch {
+	return &withOptionFetch{handle: handle}
+}
+
+func (w *withOptionFetch) WithFetchSet(ctx context.Context) context.Context {
+	var option *OptionFetch
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
+	return ctx
+}
+
+func (w *withOptionFetch) WithFetchKey(ctx context.Context) context.Context {
+	var option *OptionFetch
+	ctx = MustGetOptionFromContext(ctx, &option, true)
+	w.handle(option)
+	return ctx
+}
+
+// context.Context for *OptionDecodeKey
+func (opt *OptionDecodeKey) Deadline() (deadline time.Time, ok bool) {
+	return time.Time{}, false
+}
+
+// context.Context for *OptionDecodeKey
+func (opt *OptionDecodeKey) Done() <-chan struct{} {
+	return nil
+}
+
+// context.Context for *OptionDecodeKey
+func (opt *OptionDecodeKey) Err() error {
+	return nil
+}
+
+// context.Context for *OptionDecodeKey
+func (opt *OptionDecodeKey) Value(key interface{}) interface{} {
+	if typ, ok := key.(reflect.Type); ok {
+		if typ == reflect.TypeOf(&opt) {
+			return opt
+		}
+	}
+	return nil
+}
+
+// context.Context for *OptionDecodeSet
+func (opt *OptionDecodeSet) Deadline() (deadline time.Time, ok bool) {
+	return time.Time{}, false
+}
+
+// context.Context for *OptionDecodeSet
+func (opt *OptionDecodeSet) Done() <-chan struct{} {
+	return nil
+}
+
+// context.Context for *OptionDecodeSet
+func (opt *OptionDecodeSet) Err() error {
+	return nil
+}
+
+// context.Context for *OptionDecodeSet
+func (opt *OptionDecodeSet) Value(key interface{}) interface{} {
+	if typ, ok := key.(reflect.Type); ok {
+		if typ == reflect.TypeOf(&opt) {
+			return opt
+		}
+	}
+	return nil
+}
+
+// context.Context for *OptionEncodeSet
+func (opt *OptionEncodeSet) Deadline() (deadline time.Time, ok bool) {
+	return time.Time{}, false
+}
+
+// context.Context for *OptionEncodeSet
+func (opt *OptionEncodeSet) Done() <-chan struct{} {
+	return nil
+}
+
+// context.Context for *OptionEncodeSet
+func (opt *OptionEncodeSet) Err() error {
+	return nil
+}
+
+// context.Context for *OptionEncodeSet
+func (opt *OptionEncodeSet) Value(key interface{}) interface{} {
+	if typ, ok := key.(reflect.Type); ok {
+		if typ == reflect.TypeOf(&opt) {
+			return opt
+		}
+	}
+	return nil
+}
+
+// context.Context for *OptionEncodeKey
+func (opt *OptionEncodeKey) Deadline() (deadline time.Time, ok bool) {
+	return time.Time{}, false
+}
+
+// context.Context for *OptionEncodeKey
+func (opt *OptionEncodeKey) Done() <-chan struct{} {
+	return nil
+}
+
+// context.Context for *OptionEncodeKey
+func (opt *OptionEncodeKey) Err() error {
+	return nil
+}
+
+// context.Context for *OptionEncodeKey
+func (opt *OptionEncodeKey) Value(key interface{}) interface{} {
+	if typ, ok := key.(reflect.Type); ok {
+		if typ == reflect.TypeOf(&opt) {
+			return opt
+		}
+	}
+	return nil
+}
+
+// context.Context for *OptionFetch
+func (opt *OptionFetch) Deadline() (deadline time.Time, ok bool) {
+	return time.Time{}, false
+}
+
+// context.Context for *OptionFetch
+func (opt *OptionFetch) Done() <-chan struct{} {
+	return nil
+}
+
+// context.Context for *OptionFetch
+func (opt *OptionFetch) Err() error {
+	return nil
+}
+
+// context.Context for *OptionFetch
+func (opt *OptionFetch) Value(key interface{}) interface{} {
+	if typ, ok := key.(reflect.Type); ok {
+		if typ == reflect.TypeOf(&opt) {
+			return opt
+		}
+	}
+	return nil
 }

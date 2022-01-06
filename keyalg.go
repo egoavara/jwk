@@ -78,164 +78,54 @@ const (
 	AlgorithmA256GCM Algorithm = "A256GCM"
 )
 
+var _ALG_TABLE = map[Algorithm]KeyType{
+	AlgorithmHS256:         KeyTypeOctet,
+	AlgorithmHS384:         KeyTypeOctet,
+	AlgorithmHS512:         KeyTypeOctet,
+	AlgorithmRS256:         KeyTypeRSA,
+	AlgorithmRS384:         KeyTypeRSA,
+	AlgorithmRS512:         KeyTypeRSA,
+	AlgorithmES256:         KeyTypeEC,
+	AlgorithmES384:         KeyTypeEC,
+	AlgorithmES512:         KeyTypeEC,
+	AlgorithmPS256:         KeyTypeRSA,
+	AlgorithmPS384:         KeyTypeRSA,
+	AlgorithmPS512:         KeyTypeRSA,
+	AlgorithmRSA1_5:        KeyTypeRSA,
+	AlgorithmRSAOAEP:       KeyTypeRSA,
+	AlgorithmRSAOAEP256:    KeyTypeRSA,
+	AlgorithmA128KW:        KeyTypeOctet,
+	AlgorithmA192KW:        KeyTypeOctet,
+	AlgorithmA256KW:        KeyTypeOctet,
+	AlgorithmECDHES:        KeyTypeEC,
+	AlgorithmECDHES_A128KW: KeyTypeEC,
+	AlgorithmECDHES_A192KW: KeyTypeEC,
+	AlgorithmECDHES_A256KW: KeyTypeEC,
+	AlgorithmA128GCMKW:     KeyTypeOctet,
+	AlgorithmA192GCMKW:     KeyTypeOctet,
+	AlgorithmA256GCMKW:     KeyTypeOctet,
+	AlgorithmNone:          "",
+	// TODO : what is that?
+	// AlgorithmDir
+	// AlgorithmPBES2_HS256_A128KW
+	// AlgorithmPBES2_HS384_A192KW
+	// AlgorithmPBES2_HS512_A256KW
+	// AlgorithmA128CBC_HS256
+	// AlgorithmA192CBC_HS384
+	// AlgorithmA256CBC_HS512
+	// AlgorithmA128GCM
+	// AlgorithmA192GCM
+	// AlgorithmA256GCM
+}
+
 func (alg Algorithm) IsKnown() bool {
-	switch alg {
-	case AlgorithmHS256:
-		fallthrough
-	case AlgorithmHS384:
-		fallthrough
-	case AlgorithmHS512:
-		fallthrough
-	case AlgorithmRS256:
-		fallthrough
-	case AlgorithmRS384:
-		fallthrough
-	case AlgorithmRS512:
-		fallthrough
-	case AlgorithmES256:
-		fallthrough
-	case AlgorithmES384:
-		fallthrough
-	case AlgorithmES512:
-		fallthrough
-	case AlgorithmPS256:
-		fallthrough
-	case AlgorithmPS384:
-		fallthrough
-	case AlgorithmPS512:
-		fallthrough
-	case AlgorithmNone:
-		fallthrough
-	case AlgorithmRSA1_5:
-		fallthrough
-	case AlgorithmRSAOAEP:
-		fallthrough
-	case AlgorithmRSAOAEP256:
-		fallthrough
-	case AlgorithmA128KW:
-		fallthrough
-	case AlgorithmA192KW:
-		fallthrough
-	case AlgorithmA256KW:
-		fallthrough
-	case AlgorithmDir:
-		fallthrough
-	case AlgorithmECDHES:
-		fallthrough
-	case AlgorithmECDHES_A128KW:
-		fallthrough
-	case AlgorithmECDHES_A192KW:
-		fallthrough
-	case AlgorithmECDHES_A256KW:
-		fallthrough
-	case AlgorithmA128GCMKW:
-		fallthrough
-	case AlgorithmA192GCMKW:
-		fallthrough
-	case AlgorithmA256GCMKW:
-		fallthrough
-	case AlgorithmPBES2_HS256_A128KW:
-		fallthrough
-	case AlgorithmPBES2_HS384_A192KW:
-		fallthrough
-	case AlgorithmPBES2_HS512_A256KW:
-		fallthrough
-	case AlgorithmA128CBC_HS256:
-		fallthrough
-	case AlgorithmA192CBC_HS384:
-		fallthrough
-	case AlgorithmA256CBC_HS512:
-		fallthrough
-	case AlgorithmA128GCM:
-		fallthrough
-	case AlgorithmA192GCM:
-		fallthrough
-	case AlgorithmA256GCM:
-		return true
-	default:
-		return false
-	}
+	_, ok := _ALG_TABLE[alg]
+	return ok
 }
 func (alg Algorithm) Exist() bool {
 	return len(alg) > 0
 }
 
 func (alg Algorithm) IntoKeyType() KeyType {
-	switch alg {
-	case AlgorithmHS256:
-		return KeyTypeOctet
-	case AlgorithmHS384:
-		return KeyTypeOctet
-	case AlgorithmHS512:
-		return KeyTypeOctet
-	case AlgorithmRS256:
-		return KeyTypeRSA
-	case AlgorithmRS384:
-		return KeyTypeRSA
-	case AlgorithmRS512:
-		return KeyTypeRSA
-	case AlgorithmES256:
-		return KeyTypeEC
-	case AlgorithmES384:
-		return KeyTypeEC
-	case AlgorithmES512:
-		return KeyTypeEC
-	case AlgorithmPS256:
-		return KeyTypeRSA
-	case AlgorithmPS384:
-		return KeyTypeRSA
-	case AlgorithmPS512:
-		return KeyTypeRSA
-	case AlgorithmRSA1_5:
-		return KeyTypeRSA
-	case AlgorithmRSAOAEP:
-		return KeyTypeRSA
-	case AlgorithmRSAOAEP256:
-		return KeyTypeRSA
-	case AlgorithmA128KW:
-		return KeyTypeOctet
-	case AlgorithmA192KW:
-		return KeyTypeOctet
-	case AlgorithmA256KW:
-		return KeyTypeOctet
-	case AlgorithmECDHES:
-		return KeyTypeEC
-	case AlgorithmECDHES_A128KW:
-		return KeyTypeEC
-	case AlgorithmECDHES_A192KW:
-		return KeyTypeEC
-	case AlgorithmECDHES_A256KW:
-		return KeyTypeEC
-	case AlgorithmA128GCMKW:
-		return KeyTypeOctet
-	case AlgorithmA192GCMKW:
-		return KeyTypeOctet
-	case AlgorithmA256GCMKW:
-		return KeyTypeOctet
-	case AlgorithmNone:
-		// TODO : panics
-		panic("TODO : what to do AlgorithmNone?")
-	case AlgorithmDir:
-		panic("TODO : what is AlgorithmDir?")
-	case AlgorithmPBES2_HS256_A128KW:
-		panic("TODO : what is AlgorithmPBES2_HS256_A128KW?")
-	case AlgorithmPBES2_HS384_A192KW:
-		panic("TODO : what is AlgorithmPBES2_HS384_A192KW?")
-	case AlgorithmPBES2_HS512_A256KW:
-		panic("TODO : what is AlgorithmPBES2_HS512_A256KW?")
-	case AlgorithmA128CBC_HS256:
-		panic("TODO : what is AlgorithmA128CBC_HS256?")
-	case AlgorithmA192CBC_HS384:
-		panic("TODO : what is AlgorithmA192CBC_HS384?")
-	case AlgorithmA256CBC_HS512:
-		panic("TODO : what is AlgorithmA256CBC_HS512?")
-	case AlgorithmA128GCM:
-		panic("TODO : what is AlgorithmA128GCM?")
-	case AlgorithmA192GCM:
-		panic("TODO : what is AlgorithmA192GCM?")
-	case AlgorithmA256GCM:
-		panic("TODO : what is AlgorithmA256GCM?")
-	default:
-		panic("TODO : what to do?")
-	}
+	return _ALG_TABLE[alg]
 }

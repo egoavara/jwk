@@ -26,7 +26,7 @@ func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 	default:
 	}
 	var option *OptionEncodeKey
-	getContextValue(ctx, &option, false)
+	MustGetOptionFromContext(ctx, &option, false)
 	data := map[string]interface{}{"kty": src.Kty()}
 	if src.Use().Exist() {
 		data["use"] = src.Use()

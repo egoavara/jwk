@@ -177,7 +177,7 @@ func (key *UnknownKey) MarshalJSON() ([]byte, error) {
 func (key *UnknownKey) UnmarshalJSON(bts []byte) error {
 	rdr := bytes.NewReader(bts)
 	var opt *OptionDecodeKey
-	ctx := getContextValue(context.Background(), &opt, true)
+	ctx := MustGetOptionFromContext(context.Background(), &opt, true)
 	opt.forceUnknownKey = true
 	dat, err := DecodeKeyBy(ctx, rdr)
 	if err != nil {
@@ -218,7 +218,7 @@ func (key *RSAPrivateKey) MarshalJSON() ([]byte, error) {
 func (key *RSAPrivateKey) UnmarshalJSON(bts []byte) error {
 	rdr := bytes.NewReader(bts)
 	var opt *OptionDecodeKey
-	ctx := getContextValue(context.Background(), &opt, true)
+	ctx := MustGetOptionFromContext(context.Background(), &opt, true)
 	opt.constraintKeyType = KeyTypeRSA
 	dat, err := DecodeKeyBy(ctx, rdr)
 	if err != nil {
@@ -257,7 +257,7 @@ func (key *RSAPublicKey) MarshalJSON() ([]byte, error) {
 func (key *RSAPublicKey) UnmarshalJSON(bts []byte) error {
 	rdr := bytes.NewReader(bts)
 	var opt *OptionDecodeKey
-	ctx := getContextValue(context.Background(), &opt, true)
+	ctx := MustGetOptionFromContext(context.Background(), &opt, true)
 	opt.constraintKeyType = KeyTypeRSA
 	dat, err := DecodeKeyBy(ctx, rdr)
 	if err != nil {
@@ -298,7 +298,7 @@ func (key *ECPrivateKey) MarshalJSON() ([]byte, error) {
 func (key *ECPrivateKey) UnmarshalJSON(bts []byte) error {
 	rdr := bytes.NewReader(bts)
 	var opt *OptionDecodeKey
-	ctx := getContextValue(context.Background(), &opt, true)
+	ctx := MustGetOptionFromContext(context.Background(), &opt, true)
 	opt.constraintKeyType = KeyTypeEC
 	dat, err := DecodeKeyBy(ctx, rdr)
 	if err != nil {
@@ -339,7 +339,7 @@ func (key *ECPublicKey) MarshalJSON() ([]byte, error) {
 func (key *ECPublicKey) UnmarshalJSON(bts []byte) error {
 	rdr := bytes.NewReader(bts)
 	var opt *OptionDecodeKey
-	ctx := getContextValue(context.Background(), &opt, true)
+	ctx := MustGetOptionFromContext(context.Background(), &opt, true)
 	opt.constraintKeyType = KeyTypeEC
 	dat, err := DecodeKeyBy(ctx, rdr)
 	if err != nil {
@@ -378,7 +378,7 @@ func (key *SymetricKey) MarshalJSON() ([]byte, error) {
 func (key *SymetricKey) UnmarshalJSON(bts []byte) error {
 	rdr := bytes.NewReader(bts)
 	var opt *OptionDecodeKey
-	ctx := getContextValue(context.Background(), &opt, true)
+	ctx := MustGetOptionFromContext(context.Background(), &opt, true)
 	opt.constraintKeyType = KeyTypeOctet
 	dat, err := DecodeKeyBy(ctx, rdr)
 	if err != nil {

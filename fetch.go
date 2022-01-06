@@ -24,7 +24,7 @@ func FetchSet(url interface{}, options ...OptionalFetchSet) (s *Set, err error) 
 
 func FetchKeyBy(ctx context.Context, urlloc interface{}) (Key, error) {
 	var option *OptionFetch
-	getContextValue(ctx, &option, false)
+	MustGetOptionFromContext(ctx, &option, false)
 	//
 	rurlloc, err := utilURL(urlloc)
 	if err != nil {
@@ -43,7 +43,7 @@ func FetchKeyBy(ctx context.Context, urlloc interface{}) (Key, error) {
 
 func FetchSetBy(ctx context.Context, urlloc interface{}) (*Set, error) {
 	var option *OptionFetch
-	getContextValue(ctx, &option, false)
+	MustGetOptionFromContext(ctx, &option, false)
 	//
 	rurlloc, err := utilURL(urlloc)
 	if err != nil {
