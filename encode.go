@@ -20,9 +20,15 @@ func EncodeKey(src Key, dst io.Writer, options ...OptionalEncodeKey) error {
 }
 
 func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
+	if src == nil {
+		return makeErrors(ErrNil, fmt.Errorf("src is not nilable"))
+	}
+	if dst == nil {
+		return makeErrors(ErrNil, fmt.Errorf("dst is not nilable"))
+	}
 	select {
 	case <-ctx.Done():
-		return ErrAlreadyDone
+		return ErrContextDone
 	default:
 	}
 	var option *OptionEncodeKey
@@ -32,7 +38,7 @@ func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 		data["use"] = src.Use()
 	}
 	if len(src.KeyOps()) > 0 {
-		data["key_ops"] = src.KeyOps()
+		data["key_ops"] = src.KeyOps().AsSlice()
 	}
 	if src.Alg().Exist() {
 		data["alg"] = src.Alg()
@@ -46,15 +52,15 @@ func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 	if len(src.X5c()) > 0 {
 		certs := make([]string, len(src.X5c()))
 		for i, c := range src.X5c() {
-			certs[i] = base64.StdEncoding.EncodeToString(c.Raw)
+			certs[i] = base64.RawStdEncoding.EncodeToString(c.Raw)
 		}
 		data["x5c"] = certs
 	}
 	if len(src.X5t()) > 0 {
-		data["x5t"] = base64.StdEncoding.EncodeToString(src.X5t())
+		data["x5t"] = base64.RawURLEncoding.EncodeToString(src.X5t())
 	}
 	if len(src.X5tS256()) > 0 {
-		data["x5t#S256"] = base64.URLEncoding.EncodeToString(src.X5tS256())
+		data["x5t#S256"] = base64.RawURLEncoding.EncodeToString(src.X5tS256())
 	}
 
 	switch gokey := src.(type) {
@@ -79,34 +85,33 @@ func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 		}
 	}
 	if err := json.NewEncoder(dst).Encode(data); err != nil {
-		// FIXME : maybe no errorj
-		return mkErrors(ErrInvalidJSON, err)
+		return makeErrors(ErrInvalidJSON, err)
 	}
 	return nil
 }
 
 func encodePriRSA(data map[string]interface{}, prik *rsa.PrivateKey) error {
 	encodePubRSA(data, &prik.PublicKey)
-	data["d"] = base64.URLEncoding.EncodeToString(prik.D.Bytes())
+	data["d"] = base64.RawURLEncoding.EncodeToString(prik.D.Bytes())
 	if len(prik.Primes) >= 2 {
-		data["p"] = base64.URLEncoding.EncodeToString(prik.Primes[0].Bytes())
-		data["q"] = base64.URLEncoding.EncodeToString(prik.Primes[1].Bytes())
+		data["p"] = base64.RawURLEncoding.EncodeToString(prik.Primes[0].Bytes())
+		data["q"] = base64.RawURLEncoding.EncodeToString(prik.Primes[1].Bytes())
 	} else {
-		return mkErrors(ErrParameter, ErrCauseRSAPrivateKey, fmt.Errorf("len(primes) : %d", len(prik.Primes)))
+		return makeErrors(ErrParameter, ErrCauseRSAPrivateKey, fmt.Errorf("len(primes) : %d", len(prik.Primes)))
 	}
 	// make sure precomputed
 	// `Precompute` is do nothing when already precomputed, so do it for safety
 	prik.Precompute()
-	data["dp"] = prik.Precomputed.Dp
-	data["dq"] = prik.Precomputed.Dq
-	data["qi"] = prik.Precomputed.Qinv
+	data["dp"] = base64.RawURLEncoding.EncodeToString(prik.Precomputed.Dp.Bytes())
+	data["dq"] = base64.RawURLEncoding.EncodeToString(prik.Precomputed.Dq.Bytes())
+	data["qi"] = base64.RawURLEncoding.EncodeToString(prik.Precomputed.Qinv.Bytes())
 	// TODO : data["oth"] fields
 	return nil
 }
 
 func encodePubRSA(data map[string]interface{}, pubk *rsa.PublicKey) {
-	data["n"] = base64.URLEncoding.EncodeToString(pubk.N.Bytes())
-	data["e"] = base64.URLEncoding.EncodeToString(big.NewInt(int64(pubk.E)).Bytes())
+	data["n"] = base64.RawURLEncoding.EncodeToString(pubk.N.Bytes())
+	data["e"] = base64.RawURLEncoding.EncodeToString(big.NewInt(int64(pubk.E)).Bytes())
 }
 
 func encodePriEC(data map[string]interface{}, prik *ecdsa.PrivateKey) {
@@ -145,15 +150,21 @@ func EncodeSet(src *Set, dst io.Writer, options ...OptionalEncodeSet) error {
 	return EncodeSetBy(ctx, src, dst)
 }
 func EncodeSetBy(ctx context.Context, src *Set, dst io.Writer) error {
+	if src == nil {
+		return makeErrors(ErrNil, fmt.Errorf("src is not nilable"))
+	}
+	if dst == nil {
+		return makeErrors(ErrNil, fmt.Errorf("dst is not nilable"))
+	}
 	select {
 	case <-ctx.Done():
-		return ErrAlreadyDone
+		return ErrContextDone
 	default:
 		err := json.NewEncoder(dst).Encode(map[string]interface{}{
 			"keys": src.Keys,
 		})
 		if err != nil {
-			return mkErrors(ErrInvalidJSON, err)
+			return makeErrors(ErrInvalidJSON, err)
 		}
 		return nil
 	}

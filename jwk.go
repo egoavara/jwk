@@ -7,20 +7,20 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"math/big"
 	"net/url"
 )
 
 // Set is JWK Set struct
 // https://datatracker.ietf.org/doc/html/rfc7517#section-5
 type Set struct {
-	json.Marshaler
-	json.Unmarshaler
 	Keys  []Key // https://datatracker.ietf.org/doc/html/rfc7517#section-5.1
 	Extra map[string]interface{}
 }
 
-// BaseKey is JWK BaseKey struct
+// Key is JWK Key struct
 // https://datatracker.ietf.org/doc/html/rfc7517#section-4
 type Key interface {
 	json.Marshaler
@@ -89,6 +89,76 @@ type (
 	// TODO : https://www.rfc-editor.org/rfc/rfc7518#section-4
 	// TODO : https://www.rfc-editor.org/rfc/rfc7518#section-5
 )
+
+// data is one of
+// - *rsa.PrivateKey	-> *RSAPrivateKey
+// - *rsa.PublicKey		-> *RSAPublicKey
+// - *ecdsa.PrivateKey	-> *ECPrivateKey
+// - *ecdsa.PublicKey	-> *ECPublicKey
+// - []byte				-> *SymetricKey
+// - string				-> *SymetricKey
+// - Key				-> (self)
+func NewKey(data interface{}) Key {
+	switch d := data.(type) {
+	case *rsa.PrivateKey:
+		return &RSAPrivateKey{
+			BaseKey: BaseKey{
+				KeyOperations: map[KeyOp]struct{}{},
+				extra:         map[string]interface{}{},
+			},
+			Key: d,
+		}
+	case *rsa.PublicKey:
+		return &RSAPublicKey{
+			BaseKey: BaseKey{
+				KeyOperations: map[KeyOp]struct{}{},
+				extra:         map[string]interface{}{},
+			},
+			Key: d,
+		}
+	case *ecdsa.PrivateKey:
+		return &ECPrivateKey{
+			BaseKey: BaseKey{
+				KeyOperations: map[KeyOp]struct{}{},
+				extra:         map[string]interface{}{},
+			},
+			Key: d,
+		}
+	case *ecdsa.PublicKey:
+		return &ECPublicKey{
+			BaseKey: BaseKey{
+				KeyOperations: map[KeyOp]struct{}{},
+				extra:         map[string]interface{}{},
+			},
+			Key: d,
+		}
+	case []byte:
+		return &SymetricKey{
+			BaseKey: BaseKey{
+				KeyOperations: map[KeyOp]struct{}{},
+				extra:         map[string]interface{}{},
+			},
+			Key: d,
+		}
+	case string:
+		return &SymetricKey{
+			BaseKey: BaseKey{
+				KeyOperations: map[KeyOp]struct{}{},
+				extra:         map[string]interface{}{},
+			},
+			Key: []byte(d),
+		}
+	case Key:
+		return d
+	}
+	return nil
+}
+func NewSet(keys ...Key) *Set {
+	return &Set{
+		Keys:  keys,
+		Extra: make(map[string]interface{}),
+	}
+}
 
 func (key *UnknownKey) Kty() KeyType {
 	return key.KeyType
@@ -178,7 +248,6 @@ func (key *UnknownKey) UnmarshalJSON(bts []byte) error {
 	rdr := bytes.NewReader(bts)
 	var opt *OptionDecodeKey
 	ctx := MustGetOptionFromContext(context.Background(), &opt, true)
-	opt.forceUnknownKey = true
 	dat, err := DecodeKeyBy(ctx, rdr)
 	if err != nil {
 		return err
@@ -200,11 +269,31 @@ func (key *UnknownKey) IntoPrivateKey() crypto.PrivateKey {
 }
 
 func (key *RSAPrivateKey) intoUnknown() *UnknownKey {
-	res := new(UnknownKey)
-	bts, _ := key.MarshalJSON()
-	res.UnmarshalJSON(bts)
 	// TODO : Fatal error?
-	return res
+	extra := key.extra
+	extra["n"] = base64.RawURLEncoding.EncodeToString(key.Key.N.Bytes())
+	extra["e"] = base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.Key.E)).Bytes())
+	extra["d"] = base64.RawURLEncoding.EncodeToString(key.Key.D.Bytes())
+	extra["p"] = base64.RawURLEncoding.EncodeToString(key.Key.Primes[0].Bytes())
+	extra["q"] = base64.RawURLEncoding.EncodeToString(key.Key.Primes[1].Bytes())
+	extra["dp"] = base64.RawURLEncoding.EncodeToString(key.Key.Precomputed.Dp.Bytes())
+	extra["dq"] = base64.RawURLEncoding.EncodeToString(key.Key.Precomputed.Dq.Bytes())
+	extra["qi"] = base64.RawURLEncoding.EncodeToString(key.Key.Precomputed.Qinv.Bytes())
+	// TODO : oth
+	return &UnknownKey{
+		BaseKey: BaseKey{
+			KeyUse:                 key.Use(),
+			KeyOperations:          key.KeyOps(),
+			Algorithm:              key.Alg(),
+			KeyID:                  key.Kid(),
+			X509URL:                key.X5u(),
+			X509CertChain:          key.X5c(),
+			X509CertThumbprint:     key.X5t(),
+			X509CertThumbprintS256: key.X5tS256(),
+			extra:                  extra,
+		},
+		KeyType: key.Kty(),
+	}
 }
 
 func (key *RSAPrivateKey) MarshalJSON() ([]byte, error) {
@@ -241,11 +330,25 @@ func (key *RSAPrivateKey) IntoPrivateKey() crypto.PrivateKey {
 }
 
 func (key *RSAPublicKey) intoUnknown() *UnknownKey {
-	res := new(UnknownKey)
-	bts, _ := key.MarshalJSON()
-	res.UnmarshalJSON(bts)
 	// TODO : Fatal error?
-	return res
+	extra := key.extra
+	extra["n"] = base64.RawURLEncoding.EncodeToString(key.Key.N.Bytes())
+	extra["e"] = base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.Key.E)).Bytes())
+	// TODO : oth
+	return &UnknownKey{
+		BaseKey: BaseKey{
+			KeyUse:                 key.Use(),
+			KeyOperations:          key.KeyOps(),
+			Algorithm:              key.Alg(),
+			KeyID:                  key.Kid(),
+			X509URL:                key.X5u(),
+			X509CertChain:          key.X5c(),
+			X509CertThumbprint:     key.X5t(),
+			X509CertThumbprintS256: key.X5tS256(),
+			extra:                  extra,
+		},
+		KeyType: key.Kty(),
+	}
 }
 func (key *RSAPublicKey) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
@@ -280,11 +383,27 @@ func (key *RSAPublicKey) IntoPrivateKey() crypto.PrivateKey {
 }
 
 func (key *ECPrivateKey) intoUnknown() *UnknownKey {
-	res := new(UnknownKey)
-	bts, _ := key.MarshalJSON()
-	res.UnmarshalJSON(bts)
 	// TODO : Fatal error?
-	return res
+	extra := key.extra
+	extra["crv"] = key.Key.Curve.Params().Name
+	extra["x"] = base64.RawURLEncoding.EncodeToString(key.Key.X.Bytes())
+	extra["y"] = base64.RawURLEncoding.EncodeToString(key.Key.Y.Bytes())
+	extra["d"] = base64.RawURLEncoding.EncodeToString(key.Key.D.Bytes())
+	// TODO : oth
+	return &UnknownKey{
+		BaseKey: BaseKey{
+			KeyUse:                 key.Use(),
+			KeyOperations:          key.KeyOps(),
+			Algorithm:              key.Alg(),
+			KeyID:                  key.Kid(),
+			X509URL:                key.X5u(),
+			X509CertChain:          key.X5c(),
+			X509CertThumbprint:     key.X5t(),
+			X509CertThumbprintS256: key.X5tS256(),
+			extra:                  extra,
+		},
+		KeyType: key.Kty(),
+	}
 }
 
 func (key *ECPrivateKey) MarshalJSON() ([]byte, error) {
@@ -321,11 +440,26 @@ func (key *ECPrivateKey) IntoPrivateKey() crypto.PrivateKey {
 }
 
 func (key *ECPublicKey) intoUnknown() *UnknownKey {
-	res := new(UnknownKey)
-	bts, _ := key.MarshalJSON()
-	res.UnmarshalJSON(bts)
 	// TODO : Fatal error?
-	return res
+	extra := key.extra
+	extra["crv"] = key.Key.Curve.Params().Name
+	extra["x"] = base64.RawURLEncoding.EncodeToString(key.Key.X.Bytes())
+	extra["y"] = base64.RawURLEncoding.EncodeToString(key.Key.Y.Bytes())
+	// TODO : oth
+	return &UnknownKey{
+		BaseKey: BaseKey{
+			KeyUse:                 key.Use(),
+			KeyOperations:          key.KeyOps(),
+			Algorithm:              key.Alg(),
+			KeyID:                  key.Kid(),
+			X509URL:                key.X5u(),
+			X509CertChain:          key.X5c(),
+			X509CertThumbprint:     key.X5t(),
+			X509CertThumbprintS256: key.X5tS256(),
+			extra:                  extra,
+		},
+		KeyType: key.Kty(),
+	}
 }
 
 func (key *ECPublicKey) MarshalJSON() ([]byte, error) {
@@ -361,11 +495,24 @@ func (key *ECPublicKey) IntoPrivateKey() crypto.PrivateKey {
 }
 
 func (key *SymetricKey) intoUnknown() *UnknownKey {
-	res := new(UnknownKey)
-	bts, _ := key.MarshalJSON()
-	res.UnmarshalJSON(bts)
 	// TODO : Fatal error?
-	return res
+	extra := key.extra
+	extra["k"] = base64.RawURLEncoding.EncodeToString(key.Key)
+	// TODO : oth
+	return &UnknownKey{
+		BaseKey: BaseKey{
+			KeyUse:                 key.Use(),
+			KeyOperations:          key.KeyOps(),
+			Algorithm:              key.Alg(),
+			KeyID:                  key.Kid(),
+			X509URL:                key.X5u(),
+			X509CertChain:          key.X5c(),
+			X509CertThumbprint:     key.X5t(),
+			X509CertThumbprintS256: key.X5tS256(),
+			extra:                  extra,
+		},
+		KeyType: key.Kty(),
+	}
 }
 func (key *SymetricKey) MarshalJSON() ([]byte, error) {
 	buf := bytes.NewBuffer(nil)

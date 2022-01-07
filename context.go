@@ -43,7 +43,6 @@ type (
 	OptionDecodeKey struct {
 		// if len(KeyType) > 0, decode fail when `kty` != constraintKeyType
 		constraintKeyType        KeyType
-		forceUnknownKey          bool
 		AllowUnknownField        bool
 		DisallowUnknownAlgorithm bool
 		DisallowUnknownUse       bool

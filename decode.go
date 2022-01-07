@@ -26,11 +26,11 @@ func DecodeKey(reader io.Reader, options ...OptionalDecodeKey) (Key, error) {
 
 func DecodeKeyBy(ctx context.Context, reader io.Reader) (Key, error) {
 	if reader == nil {
-		return nil, ErrNilSource
+		return nil, makeErrors(ErrNil, fmt.Errorf("reader is not nilable"))
 	}
 	select {
 	case <-ctx.Done():
-		return nil, ErrAlreadyDone
+		return nil, ErrContextDone
 	default:
 	}
 	var option *OptionDecodeKey
@@ -54,7 +54,7 @@ func DecodeKeyBy(ctx context.Context, reader io.Reader) (Key, error) {
 
 		var data map[string]interface{}
 		if err := json.NewDecoder(reader).Decode(&data); err != nil {
-			return nil, mkErrors(ErrInvalidJSON, err)
+			return nil, makeErrors(ErrInvalidJSON, err)
 		}
 		return decodeKeyBy(ctx, option, data)
 	}
@@ -68,7 +68,7 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 	skty, ktyerr := utilConsumeStr(data, "kty")
 	kty := KeyType(skty)
 	if len(option.constraintKeyType) > 0 && option.constraintKeyType != kty {
-		return nil, mkErrors(ErrRequirement, FieldError("kty"), ErrNotExpectedKty, fmt.Errorf("expected kty='%s' but got kty='%s'", option.constraintKeyType, kty))
+		return nil, makeErrors(ErrRequirement, FieldError("kty"), ErrNotExpectedKty, fmt.Errorf("expected kty='%s' but got kty='%s'", option.constraintKeyType, kty))
 	}
 
 	bkey.extra = make(map[string]interface{})
@@ -78,13 +78,7 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 
 	switch {
 	case ktyerr != nil:
-		return nil, mkErrors(ErrRequirement, FieldError("kty"), ktyerr)
-	case option.forceUnknownKey:
-		tmp := new(UnknownKey)
-		result = tmp
-		tmp.KeyType = kty
-		tmp.BaseKey = bkey
-		decodeUnknownKey(tmp, option, data)
+		return nil, makeErrors(ErrRequirement, FieldError("kty"), ktyerr)
 	case kty == KeyTypeOctet:
 		tmp := new(SymetricKey)
 		result = tmp
@@ -136,14 +130,19 @@ func decodeKeyBy(ctx context.Context, option *OptionDecodeKey, data map[string]i
 		decodeUnknownKey(tmp, option, data)
 	}
 	//
-	if !option.AllowUnknownField {
+	if option.AllowUnknownField {
+		m := result.Extra()
+		for k, v := range data {
+			m[k] = v
+		}
+	} else {
 		if len(data) > 0 {
 			var errs []error
 			for k := range data {
 				errs = append(errs, FieldError(k))
 			}
 
-			return nil, mkErrors(append([]error{ErrRequirement, ErrDisallowUnkwownField}, errs...)...)
+			return nil, makeErrors(append([]error{ErrRequirement, ErrDisallowUnkwownField}, errs...)...)
 		}
 	}
 	return result, nil
@@ -156,12 +155,12 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		bkey.KeyUse = KeyUse(suse)
 		if option.DisallowUnknownUse {
 			if !bkey.KeyUse.IsKnown() {
-				return mkErrors(ErrRequirement, FieldError("use"), ErrUnknownKeyUse, fmt.Errorf("%v", suse))
+				return makeErrors(ErrRequirement, FieldError("use"), ErrUnknownKeyUse, fmt.Errorf("%v", suse))
 			}
 		}
 	} else {
 		if !errors.Is(useerr, ErrNotExist) {
-			return mkErrors(ErrInvalidJSON, FieldError("use"), useerr)
+			return makeErrors(ErrInvalidJSON, FieldError("use"), useerr)
 		}
 	}
 	// key_ops
@@ -171,29 +170,30 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		for i, sop := range sops {
 			op := KeyOp(sop)
 			if option.DisallowUnknownOp && !op.IsKnown() {
-				return mkErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), ErrDisallowUnknownOp, errors.New(sop))
+				return makeErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), ErrDisallowUnknownOp, errors.New(sop))
 			}
 			if option.DisallowDuplicatedOps {
 				if _, ok := m[op]; ok {
-					return mkErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), ErrDisallowDuplicatedOps, errors.New(sop))
+					return makeErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), IndexError(i), ErrDisallowDuplicatedOps, errors.New(sop))
 				}
 			}
 			m[op] = struct{}{}
 		}
 		bkey.KeyOperations = KeyOps(m)
 		if !bkey.KeyOperations.IsValidCombination() {
-			return mkErrors(ErrRequirement, FieldError("key_ops"), ErrInvalidCombination)
+			return makeErrors(ErrRequirement, FieldError("key_ops"), ErrInvalidCombination)
 		}
 	} else {
 		if !errors.Is(ErrNotExist, opserr) {
-			return mkErrors(ErrRequirement, FieldError("key_ops"), opserr)
+			return makeErrors(ErrRequirement, FieldError("key_ops"), opserr)
 		}
+		bkey.KeyOperations = make(KeyOps)
 	}
 	if useerr == nil && opserr == nil {
 		if option.DisallowBothUseAndOps {
-			return mkErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), FieldError("use"), ErrDisallowBothUseKeyops)
+			return makeErrors(ErrRequirement, ErrCauseOption, FieldError("key_ops"), FieldError("use"), ErrDisallowBothUseKeyops)
 		} else if !bkey.KeyOperations.Compatible(bkey.KeyUse) {
-			return mkErrors(ErrRequirement, FieldError("key_ops"), FieldError("use"), ErrNotCompatible, fmt.Errorf("use=%s, key_ops=%v", bkey.KeyUse, bkey.KeyOperations.AsSlice()))
+			return makeErrors(ErrRequirement, FieldError("key_ops"), FieldError("use"), ErrNotCompatible, fmt.Errorf("use=%s, key_ops=%v", bkey.KeyUse, bkey.KeyOperations.AsSlice()))
 		}
 	}
 	// alg
@@ -201,11 +201,11 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 	if algerr == nil {
 		bkey.Algorithm = Algorithm(salg)
 		if option.DisallowUnknownAlgorithm && !bkey.Algorithm.IsKnown() {
-			return mkErrors(ErrRequirement, ErrCauseOption, FieldError("alg"), ErrDisallowUnknownAlgorithm, errors.New(salg))
+			return makeErrors(ErrRequirement, ErrCauseOption, FieldError("alg"), ErrDisallowUnknownAlgorithm, errors.New(salg))
 		}
 	} else {
 		if !errors.Is(algerr, ErrNotExist) {
-			return mkErrors(ErrRequirement, FieldError("alg"), algerr)
+			return makeErrors(ErrRequirement, FieldError("alg"), algerr)
 		}
 	}
 	// kid
@@ -214,7 +214,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		bkey.KeyID = skid
 	} else {
 		if !errors.Is(kiderr, ErrNotExist) {
-			return mkErrors(ErrRequirement, FieldError("kid"), kiderr)
+			return makeErrors(ErrRequirement, FieldError("kid"), kiderr)
 		}
 	}
 	// x5u
@@ -225,7 +225,7 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 
 	} else {
 		if !errors.Is(x5uerr, ErrNotExist) {
-			return mkErrors(ErrRequirement, FieldError("x5u"), x5uerr)
+			return makeErrors(ErrRequirement, FieldError("x5u"), x5uerr)
 		}
 	}
 	// x5c
@@ -235,44 +235,44 @@ func decodeBaseKey(bkey *BaseKey, option *OptionDecodeKey, data map[string]inter
 		for i, x5cert := range ax5c {
 			bx5cert, err := base64.RawStdEncoding.DecodeString(x5cert)
 			if err != nil {
-				return mkErrors(ErrRequirement, FieldError("x5c"), IndexError(i), ErrInvalidBase64, err)
+				return makeErrors(ErrRequirement, FieldError("x5c"), IndexError(i), ErrInvalidBase64, err)
 			}
 			cert, err := x509.ParseCertificate(bx5cert)
 			if err != nil {
-				return mkErrors(ErrRequirement, FieldError("x5c"), IndexError(i), ErrInvalidX509, err)
+				return makeErrors(ErrRequirement, FieldError("x5c"), IndexError(i), ErrInvalidX509, err)
 			}
 			bkey.X509CertChain[i] = cert
 		}
 		// TODO : Validate x5c
 	} else {
 		if !errors.Is(x5cerr, ErrNotExist) {
-			return mkErrors(ErrRequirement, FieldError("x5c"), x5cerr)
+			return makeErrors(ErrRequirement, FieldError("x5c"), x5cerr)
 		}
 	}
 	// x5t
 	bx5t, x5terr := utilConsumeB64url(data, "x5t")
 	if x5terr == nil {
 		if sha1.Size != len(bx5t) {
-			return mkErrors(ErrRequirement, FieldError("x5t"), ErrSHA1Size, fmt.Errorf("expected length %d, but got %d", sha1.Size, len(bx5t)))
+			return makeErrors(ErrRequirement, FieldError("x5t"), ErrSHA1Size, fmt.Errorf("expected length %d, but got %d", sha1.Size, len(bx5t)))
 		}
 		bkey.X509CertThumbprint = bx5t
 		// TODO : Validate x5t
 	} else {
 		if !errors.Is(x5terr, ErrNotExist) {
-			return mkErrors(ErrRequirement, FieldError("x5t"), x5terr)
+			return makeErrors(ErrRequirement, FieldError("x5t"), x5terr)
 		}
 	}
 	// x5t#S256
 	bx5ts, x5tserr := utilConsumeB64url(data, "x5t#S256")
 	if x5tserr == nil {
 		if sha256.Size != len(bx5ts) {
-			return mkErrors(ErrRequirement, FieldError("x5t#S256"), ErrSHA256Size, fmt.Errorf("expected length %d, but got %d", sha256.Size, len(bx5ts)))
+			return makeErrors(ErrRequirement, FieldError("x5t#S256"), ErrSHA256Size, fmt.Errorf("expected length %d, but got %d", sha256.Size, len(bx5ts)))
 		}
 		bkey.X509CertThumbprintS256 = bx5ts
 		// TODO : Validate x5t#S256
 	} else {
 		if !errors.Is(x5tserr, ErrNotExist) {
-			return mkErrors(ErrRequirement, FieldError("x5t#S256"), x5tserr)
+			return makeErrors(ErrRequirement, FieldError("x5t#S256"), x5tserr)
 		}
 	}
 	return nil
@@ -282,7 +282,7 @@ func decodeSymetricKey(key *[]byte, option *OptionDecodeKey, data map[string]int
 	if bn, err := utilConsumeB64url(data, "k"); err == nil {
 		*key = bn
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseSymetricKey, FieldError("k"), err)
+		return makeErrors(ErrRequirement, ErrCauseSymetricKey, FieldError("k"), err)
 	}
 	return nil
 }
@@ -301,13 +301,13 @@ func decodeRSAPubKey(key *rsa.PublicKey, option *OptionDecodeKey, data map[strin
 	if bn, err := utilConsumeB64url(data, "n"); err == nil {
 		key.N = new(big.Int).SetBytes(bn)
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseRSAPublicKey, FieldError("n"), err)
+		return makeErrors(ErrRequirement, ErrCauseRSAPublicKey, FieldError("n"), err)
 	}
 	// public E
 	if be, err := utilConsumeB64url(data, "e"); err == nil {
 		key.E = int(new(big.Int).SetBytes(be).Int64())
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseRSAPublicKey, FieldError("e"), err)
+		return makeErrors(ErrRequirement, ErrCauseRSAPublicKey, FieldError("e"), err)
 	}
 	return nil
 }
@@ -327,17 +327,17 @@ func decodeRSAPriKey(key *rsa.PrivateKey, option *OptionDecodeKey, data map[stri
 	if bd, err := utilConsumeB64url(data, "d"); err == nil {
 		key.D = new(big.Int).SetBytes(bd)
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("d"), err)
+		return makeErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("d"), err)
 	}
 	if bp, err := utilConsumeB64url(data, "p"); err == nil {
 		key.Primes = append(key.Primes, new(big.Int).SetBytes(bp))
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("p"), err)
+		return makeErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("p"), err)
 	}
 	if bq, err := utilConsumeB64url(data, "q"); err == nil {
 		key.Primes = append(key.Primes, new(big.Int).SetBytes(bq))
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("q"), err)
+		return makeErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("q"), err)
 	}
 	if option.IgnorePrecomputed {
 		delete(data, "dp")
@@ -348,17 +348,17 @@ func decodeRSAPriKey(key *rsa.PrivateKey, option *OptionDecodeKey, data map[stri
 		if bdp, err := utilConsumeB64url(data, "dp"); err == nil {
 			key.Precomputed.Dp = new(big.Int).SetBytes(bdp)
 		} else {
-			return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("dp"), err)
+			return makeErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("dp"), err)
 		}
 		if bdq, err := utilConsumeB64url(data, "dq"); err == nil {
 			key.Precomputed.Dq = new(big.Int).SetBytes(bdq)
 		} else {
-			return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("dq"), err)
+			return makeErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("dq"), err)
 		}
 		if bqi, err := utilConsumeB64url(data, "qi"); err == nil {
 			key.Precomputed.Qinv = new(big.Int).SetBytes(bqi)
 		} else {
-			return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("qi"), err)
+			return makeErrors(ErrRequirement, ErrCauseRSAPrivateKey, FieldError("qi"), err)
 		}
 	}
 	// TODO : data["oth"]
@@ -379,7 +379,7 @@ func decodeRSAPriKey(key *rsa.PrivateKey, option *OptionDecodeKey, data map[stri
 	// }
 	if !option.IgnoreValidate {
 		if err := key.Validate(); err != nil {
-			return mkErrors(ErrRequirement, ErrCauseRSAPrivateKey, ErrCauseRSAValidate, err)
+			return makeErrors(ErrRequirement, ErrCauseRSAPrivateKey, ErrCauseRSAValidate, err)
 		}
 	}
 	return nil
@@ -397,27 +397,27 @@ func decodeECPubKey(key *ecdsa.PublicKey, option *OptionDecodeKey, data map[stri
 		case "P-521":
 			key.Curve = elliptic.P521()
 		default:
-			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("crv"), ErrCauseUnknown, fmt.Errorf("unknown curve '%s'", curve))
+			return makeErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("crv"), ErrCauseUnknown, fmt.Errorf("unknown curve '%s'", curve))
 		}
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("crv"), err)
+		return makeErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("crv"), err)
 	}
 	expectedLength := (key.Curve.Params().BitSize + 7) / 8
 	if x, err := utilConsumeB64url(data, "x"); err == nil {
 		if len(x) != expectedLength {
-			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("x"), ErrECInvalidBytesLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(x)))
+			return makeErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("x"), ErrECInvalidBytesLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(x)))
 		}
 		key.X = new(big.Int).SetBytes(x)
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("x"), err)
+		return makeErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("x"), err)
 	}
 	if y, err := utilConsumeB64url(data, "y"); err == nil {
 		if len(y) != expectedLength {
-			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), ErrECInvalidBytesLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(y)))
+			return makeErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), ErrECInvalidBytesLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(y)))
 		}
 		key.Y = new(big.Int).SetBytes(y)
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), err)
+		return makeErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), err)
 	}
 	return nil
 }
@@ -432,11 +432,11 @@ func decodeECPriKey(key *ecdsa.PrivateKey, option *OptionDecodeKey, data map[str
 	expectedLength := (key.Curve.Params().BitSize + 7) / 8
 	if d, err := utilConsumeB64url(data, "d"); err == nil {
 		if len(d) != expectedLength {
-			return mkErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), ErrECInvalidBytesLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(d)))
+			return makeErrors(ErrRequirement, ErrCauseECPublicKey, FieldError("y"), ErrECInvalidBytesLength, fmt.Errorf("expected length %d, but got %d", expectedLength, len(d)))
 		}
 		key.D = new(big.Int).SetBytes(d)
 	} else {
-		return mkErrors(ErrRequirement, ErrCauseECPrivateKey, FieldError("d"), err)
+		return makeErrors(ErrRequirement, ErrCauseECPrivateKey, FieldError("d"), err)
 	}
 	return nil
 }
@@ -450,9 +450,12 @@ func DecodeSet(reader io.Reader, options ...OptionalDecodeSet) (*Set, error) {
 }
 
 func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
+	if reader == nil {
+		return nil, makeErrors(ErrNil, fmt.Errorf("reader is not nilable"))
+	}
 	select {
 	case <-ctx.Done():
-		return nil, ErrAlreadyDone
+		return nil, ErrContextDone
 	default:
 	}
 	//
@@ -462,7 +465,7 @@ func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
 	MustGetOptionFromContext(ctx, &optionk, false)
 	var data map[string]interface{}
 	if err := json.NewDecoder(reader).Decode(&data); err != nil {
-		return nil, mkErrors(ErrInvalidJSON, err)
+		return nil, makeErrors(ErrInvalidJSON, err)
 	}
 	var result = new(Set)
 	if akey, err := utilConsumeArrMap(data, "keys"); err == nil {
@@ -470,18 +473,18 @@ func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
 		for i, m := range akey {
 			result.Keys[i], err = decodeKeyBy(ctx, optionk, m)
 			if err != nil {
-				return nil, mkErrors(ErrInnerKey, FieldError("keys"), IndexError(i), err)
+				return nil, makeErrors(ErrInnerKey, FieldError("keys"), IndexError(i), err)
 			}
 		}
 	} else {
-		return nil, mkErrors(ErrRequirement, FieldError("keys"), err)
+		return nil, makeErrors(ErrRequirement, FieldError("keys"), err)
 	}
 	if option.DisallowUnknownField && len(data) > 0 {
 		var errs []error
 		for k := range data {
 			errs = append(errs, FieldError(k))
 		}
-		return nil, mkErrors(append([]error{ErrRequirement, ErrDisallowUnkwownField}, errs...)...)
+		return nil, makeErrors(append([]error{ErrRequirement, ErrDisallowUnkwownField}, errs...)...)
 	}
 	result.Extra = data
 	return result, nil

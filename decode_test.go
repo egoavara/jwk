@@ -222,8 +222,8 @@ func TestDecodeKeySecrets(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected not <nil>, but got <nil>")
 		}
-		if !errors.Is(err, jwk.ErrNilSource) {
-			t.Fatalf("expected %v is %v, but not", err, jwk.ErrNilSource)
+		if !errors.Is(err, jwk.ErrNil) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrNil)
 		}
 	})
 	t.Run("done context", func(t *testing.T) {
@@ -233,8 +233,8 @@ func TestDecodeKeySecrets(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected not <nil>, but got <nil>")
 		}
-		if !errors.Is(err, jwk.ErrAlreadyDone) {
-			t.Fatalf("expected %v is %v, but not", err, jwk.ErrAlreadyDone)
+		if !errors.Is(err, jwk.ErrContextDone) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrContextDone)
 		}
 	})
 	t.Run("invalid json", func(t *testing.T) {
@@ -308,6 +308,7 @@ func TestDecodeKeySecrets(t *testing.T) {
 		}
 	})
 }
+
 func TestDecodeKty(t *testing.T) {
 	t.Run("not exist", func(t *testing.T) {
 		_, err := jwk.DecodeKey(strings.NewReader(basekeyKtyNotExist))
@@ -328,6 +329,7 @@ func TestDecodeKty(t *testing.T) {
 		}
 	})
 }
+
 func TestDecodeUse(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		k, err := jwk.DecodeKey(strings.NewReader(basekeyUseValid))
@@ -672,6 +674,7 @@ func TestDecodeX5tSHA256(t *testing.T) {
 		}
 	})
 }
+
 func TestDecodeUnknown(t *testing.T) {
 	t.Run("unknown kty", func(t *testing.T) {
 		k, err := jwk.DecodeKey(strings.NewReader(unknownUnknownKty))
@@ -956,7 +959,7 @@ func TestDecodeSet(t *testing.T) {
 	t.Run("invalid json", func(t *testing.T) {
 		_, err := jwk.DecodeSet(strings.NewReader(setInvalidJSON))
 		if !errors.Is(err, jwk.ErrInvalidJSON) {
-			t.Fatalf("expected %v is %v, but not", err, jwk.ErrAlreadyDone)
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrContextDone)
 		}
 	})
 	t.Run("with invalid key", func(t *testing.T) {
@@ -969,8 +972,8 @@ func TestDecodeSet(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		_, err := jwk.DecodeSetBy(ctx, strings.NewReader(setUnknownField))
-		if !errors.Is(err, jwk.ErrAlreadyDone) {
-			t.Fatalf("expected %v is %v, but not", err, jwk.ErrAlreadyDone)
+		if !errors.Is(err, jwk.ErrContextDone) {
+			t.Fatalf("expected %v is %v, but not", err, jwk.ErrContextDone)
 		}
 	})
 	t.Run("allow unknown field", func(t *testing.T) {

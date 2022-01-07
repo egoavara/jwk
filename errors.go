@@ -6,8 +6,8 @@ import (
 )
 
 var (
-	ErrAlreadyDone        = errors.New("context already done")
-	ErrNilSource          = errors.New("source must be not <nil>")
+	ErrContextDone        = errors.New("context already done")
+	ErrNil                = errors.New("not nil")
 	ErrParameter          = errors.New("parameter")
 	ErrRequirement        = errors.New("not satisfied requirement")
 	ErrHTTPRequest        = errors.New("http request failed")
@@ -53,21 +53,17 @@ type (
 		current error
 		child   error
 	}
-	fieldError struct {
-		field string
-	}
-	indexError struct {
-		index int
-	}
+	FieldError string
+	IndexError int
 )
 
-func mkErrors(err ...error) error {
+func makeErrors(err ...error) error {
 	if len(err) == 0 {
 		return nil
 	}
 	return &wrapError{
 		current: err[0],
-		child:   mkErrors(err[1:]...),
+		child:   makeErrors(err[1:]...),
 	}
 }
 func replaceErrors(err error, from error, to error) {
@@ -80,23 +76,11 @@ func replaceErrors(err error, from error, to error) {
 	}
 }
 
-func IndexError(index int) error {
-	return &indexError{
-		index: index,
-	}
+func (ie IndexError) Error() string {
+	return fmt.Sprintf("[%d]", int(ie))
 }
-
-func FieldError(field string) error {
-	return &fieldError{
-		field: field,
-	}
-}
-
-func (ie *indexError) Error() string {
-	return fmt.Sprintf("[%d]", ie.index)
-}
-func (fe *fieldError) Error() string {
-	return fmt.Sprintf("'%s'", fe.field)
+func (fe FieldError) Error() string {
+	return fmt.Sprintf("'%s'", string(fe))
 }
 
 func (we *wrapError) Error() string {
@@ -105,32 +89,35 @@ func (we *wrapError) Error() string {
 	}
 	return fmt.Sprintf("%v, %v", we.current, we.child)
 }
+
 func (we *wrapError) Unwrap() error {
 	return we.child
 }
+
 func (we *wrapError) As(i interface{}) bool {
-	if errors.As(we.current, i) {
-		return true
-	}
-	return false
+	return errors.As(we.current, i)
 }
+
 func (we *wrapError) Is(other error) bool {
-	if errors.Is(we.current, other) {
-		return true
+	return we == other || errors.Is(we.current, other)
+}
+
+func (fe *FieldError) Is(other error) bool {
+	switch oth := other.(type) {
+	case FieldError:
+		return *fe == oth
+	case *FieldError:
+		return *fe == *oth
 	}
 	return false
 }
 
-func (fe *fieldError) Is(other error) bool {
-	if ofe, ok := other.(*fieldError); ok {
-		return fe.field == ofe.field
-	}
-	return false
-}
-
-func (ie *indexError) Is(other error) bool {
-	if oie, ok := other.(*indexError); ok {
-		return ie.index == oie.index
+func (ie *IndexError) Is(other error) bool {
+	switch oth := other.(type) {
+	case IndexError:
+		return *ie == oth
+	case *IndexError:
+		return *ie == *oth
 	}
 	return false
 }

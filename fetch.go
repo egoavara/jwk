@@ -36,7 +36,7 @@ func FetchKeyBy(ctx context.Context, urlloc interface{}) (Key, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, mkErrors(ErrHTTPRequest, fmt.Errorf("unexpected status code %d", res.StatusCode))
+		return nil, makeErrors(ErrHTTPRequest, fmt.Errorf("unexpected status code %d", res.StatusCode))
 	}
 	return DecodeKeyBy(ctx, res.Body)
 }
@@ -55,7 +55,7 @@ func FetchSetBy(ctx context.Context, urlloc interface{}) (*Set, error) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, mkErrors(ErrHTTPRequest, fmt.Errorf("unexpected status code %d", res.StatusCode))
+		return nil, makeErrors(ErrHTTPRequest, fmt.Errorf("unexpected status code %d", res.StatusCode))
 	}
 	return DecodeSetBy(ctx, res.Body)
 }
