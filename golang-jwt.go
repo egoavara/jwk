@@ -50,7 +50,7 @@ func WithGuess(guess bool) OptionalJWTVerifier {
 // source can be one of `*Set`, `Key`, `*Fetcher`, `<nil>`
 // It can be nil return, if source is unknown type or <nil>
 // when source is <nil>, it return JWTVerifierFromToken
-func LetJWT(source interface{}, options ...OptionalJWTVerifier) jwt.Keyfunc {
+func LetJWTVerifier(source interface{}, options ...OptionalJWTVerifier) jwt.Keyfunc {
 	if ver := NewJWTVerifier(source); ver != nil {
 		return ver.Keyfunc
 	}
