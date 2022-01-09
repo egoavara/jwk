@@ -249,7 +249,7 @@ func TestEncodeKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected <nil>, but got %v", err)
 		}
-		key := jwk.NewKey(rkey)
+		key := jwk.MustKey(rkey)
 		buf := bytes.NewBuffer(nil)
 		if err := jwk.EncodeKeyBy(ctx, key, buf); !errors.Is(err, jwk.ErrContextDone) {
 			t.Fatalf("expected <nil>, but got %v", err)
@@ -261,7 +261,7 @@ func TestEncodeKey(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected <nil>, but got %v", err)
 		}
-		key := jwk.NewKey(rkey)
+		key := jwk.MustKey(rkey)
 		if err := jwk.EncodeKeyBy(context.Background(), key, nil); !errors.Is(err, jwk.ErrNil) {
 			t.Fatalf("expected <nil>, but got %v", err)
 		}
@@ -283,7 +283,7 @@ func TestEncodeKey(t *testing.T) {
 		var jsona = bytes.NewBuffer(nil)
 		var jsonb = bytes.NewBuffer(nil)
 		//
-		key := jwk.NewKey(rkey)
+		key := jwk.MustKey(rkey)
 		key.Extra()["hello"] = "world"
 
 		if err = jwk.EncodeKey(key, jsona, jwk.WithOptionEncodeKey(func(value *jwk.OptionEncodeKey) { value.DisallowUnknownField = true })); err != nil {
@@ -337,7 +337,7 @@ func TestEncodeKey(t *testing.T) {
 			}
 		}
 		//
-		k := jwk.NewKey(eckey)
+		k := jwk.MustKey(eckey)
 		kenc := bytes.NewBuffer(nil)
 		if err := jwk.EncodeKey(k, kenc); err != nil {
 			t.Fatalf("expected not <nil>, but got %v", err)
@@ -362,7 +362,7 @@ func TestEncodeKey(t *testing.T) {
 func TestEncodeSet(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		eck, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		k := jwk.NewKey(eck)
+		k := jwk.MustKey(eck)
 		s := jwk.NewSet(k)
 		buf := bytes.NewBuffer(nil)
 		if err := jwk.EncodeSet(s, buf, jwk.WithOptionEncodeSet(func(value *jwk.OptionEncodeSet) { value.DisallowUnknownField = true })); err != nil {
@@ -381,7 +381,7 @@ func TestEncodeSet(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		eck, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		k := jwk.NewKey(eck)
+		k := jwk.MustKey(eck)
 		s := jwk.NewSet(k)
 		buf := bytes.NewBuffer(nil)
 		err := jwk.EncodeSetBy(ctx, s, buf)
@@ -392,7 +392,7 @@ func TestEncodeSet(t *testing.T) {
 
 	t.Run("nil io", func(t *testing.T) {
 		eck, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-		k := jwk.NewKey(eck)
+		k := jwk.MustKey(eck)
 		s := jwk.NewSet(k)
 		err := jwk.EncodeSetBy(context.Background(), s, nil)
 		if !errors.Is(err, jwk.ErrNil) {

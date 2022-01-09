@@ -75,19 +75,10 @@ func LazyFetcher(urlloc interface{}, opts ...OptionalFetcher) *Fetcher {
 	return fet
 }
 
-// `MustGet` mean if there is no resourece from origin(cause by network error, or server down, or many reason), it return PANIC!
+// `MustGet` mean if there is no resourece from origin(cause by network error, or server down, or many reason), it return <nil>
 // So if you want to use this, take responsibility
 // If you want return NIL instead of PANIC, try `Should`
 func (fet *Fetcher) MustGet(opts ...OptioanlRefresh) *Set {
-	if s, err := fet.Get(); err != nil {
-		panic(err)
-	} else {
-		return s
-	}
-}
-
-// `ShouldGet` mean if refresh is failed,
-func (fet *Fetcher) ShouldGet(opts ...OptioanlRefresh) *Set {
 	if s, err := fet.Get(); err != nil {
 		return nil
 	} else {

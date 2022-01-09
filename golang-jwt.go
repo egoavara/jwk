@@ -38,6 +38,31 @@ type (
 )
 
 var ErrNoKeyForVerifier = errors.New("no key for verifier")
+var (
+	signingMethodTable = map[Algorithm]jwt.SigningMethod{
+		AlgorithmRS256: jwt.SigningMethodRS256,
+		AlgorithmRS384: jwt.SigningMethodRS384,
+		AlgorithmRS512: jwt.SigningMethodRS512,
+
+		AlgorithmES256: jwt.SigningMethodES256,
+		AlgorithmES384: jwt.SigningMethodES384,
+		AlgorithmES512: jwt.SigningMethodES512,
+
+		AlgorithmHS256: jwt.SigningMethodHS256,
+		AlgorithmHS384: jwt.SigningMethodHS384,
+		AlgorithmHS512: jwt.SigningMethodHS512,
+
+		AlgorithmPS256: jwt.SigningMethodPS256,
+		AlgorithmPS384: jwt.SigningMethodPS384,
+		AlgorithmPS512: jwt.SigningMethodPS512,
+
+		AlgorithmNone: jwt.SigningMethodNone,
+	}
+)
+
+// var jwtSigningMethod = map[Algorithm]jwt.SigningMethod{
+
+// }
 
 func (fn fnOptionalJWTVerifier) WithJWTVerifier(opt *OptionJWTVerifier) {
 	fn(opt)
@@ -50,11 +75,14 @@ func WithGuess(guess bool) OptionalJWTVerifier {
 // source can be one of `*Set`, `Key`, `*Fetcher`, `<nil>`
 // It can be nil return, if source is unknown type or <nil>
 // when source is <nil>, it return JWTVerifierFromToken
-func LetJWTVerifier(source interface{}, options ...OptionalJWTVerifier) jwt.Keyfunc {
+func LetKeyfunc(source interface{}, options ...OptionalJWTVerifier) jwt.Keyfunc {
 	if ver := NewJWTVerifier(source); ver != nil {
 		return ver.Keyfunc
 	}
 	return nil
+}
+func LetSigningMethod(key Key) jwt.SigningMethod {
+	return signingMethodTable[GuessAlgorithm(key)]
 }
 
 func NewJWTVerifier(source interface{}, options ...OptionalJWTVerifier) JWTVerifier {
@@ -111,7 +139,7 @@ func (ver *JWTVerifierFromFetcher) Keyfunc(tk *jwt.Token) (interface{}, error) {
 		k = set.GetUniqueKey(tk.Header["kid"].(string), Algorithm(tk.Header["alg"].(string)).IntoKeyType())
 	}
 	if k != nil {
-		if itf := k.IntoKey(); itf != nil {
+		if itf := k.IntoPublicKey(); itf != nil {
 			return itf, nil
 		} else {
 			// TODO : More detailed error
@@ -122,7 +150,7 @@ func (ver *JWTVerifierFromFetcher) Keyfunc(tk *jwt.Token) (interface{}, error) {
 }
 func (ver *JWTVerifierFromKey) Keyfunc(tk *jwt.Token) (interface{}, error) {
 	if isValidKeyForToken(ver.Key, tk) {
-		if itf := ver.Key.IntoKey(); itf != nil {
+		if itf := ver.Key.IntoPublicKey(); itf != nil {
 			return itf, nil
 		} else {
 			// TODO : More detailed error
@@ -139,7 +167,7 @@ func (ver *JWTVerifierFromSet) Keyfunc(tk *jwt.Token) (interface{}, error) {
 		k = ver.Set.GetUniqueKey(tk.Header["kid"].(string), Algorithm(tk.Header["alg"].(string)).IntoKeyType())
 	}
 	if k != nil {
-		if itf := k.IntoKey(); itf != nil {
+		if itf := k.IntoPublicKey(); itf != nil {
 			return itf, nil
 		} else {
 			// TODO : More detailed error
