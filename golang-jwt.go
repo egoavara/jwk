@@ -84,6 +84,23 @@ func LetKeyfunc(source interface{}, options ...OptionalJWTVerifier) jwt.Keyfunc 
 func LetSigningMethod(key Key) jwt.SigningMethod {
 	return signingMethodTable[GuessAlgorithm(key)]
 }
+func LetSign(key Key, claim jwt.Claims) (*jwt.Token, string, error) {
+	var token = jwt.New(LetSigningMethod(key))
+	token.Claims = claim
+	sign, err := token.SignedString(key.IntoPrivateKey())
+	if err != nil {
+		return nil, "", err
+	}
+	return token, sign, nil
+}
+func LetVerify(message string, key Key, claim jwt.Claims) (token *jwt.Token, err error) {
+
+	token, err = jwt.ParseWithClaims(message, claim, LetKeyfunc(key))
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
+}
 
 func NewJWTVerifier(source interface{}, options ...OptionalJWTVerifier) JWTVerifier {
 	switch src := source.(type) {
