@@ -19,6 +19,13 @@ func EncodeKey(src Key, dst io.Writer, options ...OptionalEncodeKey) error {
 	return EncodeKeyBy(ctx, src, dst)
 }
 
+func MustEncodeKey(src Key, dst io.Writer, options ...OptionalEncodeKey) {
+	err := EncodeKey(src, dst, options...)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func EncodeKeyBy(ctx context.Context, src Key, dst io.Writer) error {
 	if src == nil {
 		return makeErrors(ErrNil, fmt.Errorf("src is not nilable"))
@@ -149,6 +156,14 @@ func EncodeSet(src *Set, dst io.Writer, options ...OptionalEncodeSet) error {
 	}
 	return EncodeSetBy(ctx, src, dst)
 }
+
+func MustEncodeSet(src *Set, dst io.Writer, options ...OptionalEncodeSet) {
+	err := EncodeSet(src, dst, options...)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func EncodeSetBy(ctx context.Context, src *Set, dst io.Writer) error {
 	if src == nil {
 		return makeErrors(ErrNil, fmt.Errorf("src is not nilable"))

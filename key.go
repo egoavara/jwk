@@ -392,9 +392,9 @@ func (key *SymetricKey) IntoKey() interface{} {
 }
 
 func (key *SymetricKey) IntoPublicKey() crypto.PublicKey {
-	return nil
+	return key.Key
 }
 
 func (key *SymetricKey) IntoPrivateKey() crypto.PrivateKey {
-	return nil
+	return key.Key
 }

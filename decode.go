@@ -24,6 +24,14 @@ func DecodeKey(reader io.Reader, options ...OptionalDecodeKey) (Key, error) {
 	return DecodeKeyBy(ctx, reader)
 }
 
+func MustDecodeKey(reader io.Reader, options ...OptionalDecodeKey) Key {
+	key, err := DecodeKey(reader, options...)
+	if err != nil {
+		panic(err)
+	}
+	return key
+}
+
 func DecodeKeyBy(ctx context.Context, reader io.Reader) (Key, error) {
 	if reader == nil {
 		return nil, makeErrors(ErrNil, fmt.Errorf("reader is not nilable"))
@@ -447,6 +455,14 @@ func DecodeSet(reader io.Reader, options ...OptionalDecodeSet) (*Set, error) {
 		ctx = option.WithDecodeSet(ctx)
 	}
 	return DecodeSetBy(ctx, reader)
+}
+
+func MustDecodeSet(reader io.Reader, options ...OptionalDecodeSet) *Set {
+	set, err := DecodeSet(reader, options...)
+	if err != nil {
+		panic(err)
+	}
+	return set
 }
 
 func DecodeSetBy(ctx context.Context, reader io.Reader) (*Set, error) {
